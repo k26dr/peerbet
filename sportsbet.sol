@@ -40,34 +40,43 @@ contract SportsBet is owned, mortal {
         Game game = getGameById(game_id);
         Book book = game.books[BetType.Spread];
         Bid bid = Bid(msg.sender, msg.value, home, line);
-        Bid[] bidStack = home ?  book.awayBids : book.homeBids;
+        Bid[] matchStack = home ?  book.awayBids : book.homeBids;
+        Bid[] bidStack = home ? book.homeBids : book.awayBids;
 
         // Match existing bets (taker)
-        for (uint i = bidStack.length - 1; 
-            -bidStack[i].line >= bid.line && bid.amount > 0 && i >= 0;
+        Bid remainingBid = matchBidToStack(bid, matchStack, home);
+
+        // Use leftover funds to place open bids (maker)
+        addBidToStack(remainingBid, bidStack);
+
+    }
+
+    function matchBidToStack(Bid bid, Bid[] stack, home) {
+        for (uint i = stack.length - 1; 
+            -stack[i].line >= bid.line && bid.amount > 0 && i >= 0;
             i--)
         {
-            address homeAddress = home ? bid.bidder : bidStack[i].bidder;
-            address awayAddress = home ? bidStack[i].bidder : bid.bidder;
-            uint betAmount = bid.amount < bidStack[i].amount ? bid.amount : bidStack[i].amount;
-            int64 betLine = home ? -bidStack[i].line : bidStack[i].line;
-            delete bidStack[i];
+            address homeAddress = home ? bid.bidder : stack[i].bidder;
+            address awayAddress = home ? stack[i].bidder : bid.bidder;
+            uint betAmount = bid.amount < stack[i].amount ? bid.amount : stack[i].amount;
+            int64 betLine = home ? -stack[i].line : stack[i].line;
+            delete stack[i];
             Bet bet = Bet(homeAddress, awayAddress, betAmount, betLine);
             book.bets.push(bet);
             bid.amount -= betAmount;
         }
 
-        // Use leftover funds to place open bids (maker)
-        addBidToStack(bid, bidStack);
-
+        return bid;
     }
 
     function addBidToStack(Bid bid, Bid[] stack) {
         uint i = stack.length - 1;
+        stack.push(bid) # just to make the stack one item larger
         while (stack[i].amount <= bid.amount && i > 0) {
+            stack[i+1] = stack[i];
             i--;
         }
-        stack
+        stack[i+1] = bid;
     }
 
     function getGameById(bytes32 game_id) private returns (Game g) {

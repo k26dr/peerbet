@@ -1,8 +1,9 @@
 pragma solidity ^0.4.9;
 
 contract SportsBet {
-    enum GameStatus { Open, Locked }
+    enum GameStatus { Open, Locked, Scored }
     enum BookType { Spread, MoneyLine, OverUnder }
+    enum BetStatus { Open, Paid }
 
     struct Bid {
         address bidder;
@@ -16,13 +17,18 @@ contract SportsBet {
         address away;
         uint amount; /* in wei */
         int64 line;
+        BetStatus status;
     }
 
     struct Book {
-        BookType bookType;
         Bid[] homeBids;
         Bid[] awayBids;
         Bet[] bets;
+    }
+
+    struct GameResult {
+        int home;
+        int away;
     }
 
     struct Game {
@@ -32,7 +38,8 @@ contract SportsBet {
         uint locktime;
         GameStatus status;
         string category;
-        Book[] books;
+        mapping(uint => Book) books;
+        GameResult result;
     }
 
     address owner;
@@ -43,12 +50,58 @@ contract SportsBet {
         address owner = msg.sender;
     }
 
-    function bidSpread(bytes32 game_id, bool home, int64 line) payable {
+    function createGame (string home, string away, uint locktime, string category) {
+        if (msg.sender != owner) throw;
+        bytes32 id = keccak256(bytes(home) + bytes(away) + bytes(locktime));
+        mapping(uint => Books) books;
+        Bid[] homeBids;
+        Bid[] awayBids;
+        Bet[] bets;
+        books[uint(BookType.Spread)] = Book(homeBids, awayBids, bets);
+        GameResult result = GameResult(0,0);
+        Game game = Game(id, home, away, locktime, GameStatus.Open, category, books);
+        games.push(game);
+    }
+
+    function setGameResult (bytes32 game_id, int homeScore, int awayScore) {
+        if (msg.sender != owner) throw;
+
+        Game game = getGameById(game_id);
+        game.result.home = homeScore;
+        game.result.away = awayScore;
+        game.status = GameStatus.Scored;
+
+        // Currently only handles spread bets
+        Bets[] bets = Game.books[uint(BookType.Spread)].bets;
+        uint resultSpread = awayScore - homeScore;
+        for (uint i = 0; i < bets.length; i++) {
+            if (resultSpread > bet.line) 
+                balances[bet.away] += bet.amount * 2;
+            else if (resultSpread < bet.line)
+                balances[bet.home] += bet.amount * 2;
+            else { // draw
+                balances[bet.away] += bet.amount;
+                balances[bet.home] += bet.amount;
+            }
+            bet.status = BetStatus.Paid;
+        }
+    }
+        
+
+    function bidSpread(bytes32 game_id, bool home, int64 line) payable returns (bool) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
         Bid memory bid = Bid(msg.sender, msg.value, home, line);
         Bid[] matchStack = home ?  book.awayBids : book.homeBids;
         Bid[] bidStack = home ? book.homeBids : book.awayBids;
+
+        // check game locktime
+        if (game.status == GameStatus.Locked)
+            return false;
+        if (now > game.locktime) {
+            game.status = GameStatus.Locked;    
+            return false;
+        }
 
         // Match existing bets (taker)
         for (uint i = matchStack.length - 1; 
@@ -60,7 +113,7 @@ contract SportsBet {
             uint betAmount = bid.amount < matchStack[i].amount ? bid.amount : matchStack[i].amount;
             int64 betLine = home ? -matchStack[i].line : matchStack[i].line;
             delete matchStack[i];
-            Bet memory bet = Bet(homeAddress, awayAddress, betAmount, betLine);
+            Bet memory bet = Bet(homeAddress, awayAddress, betAmount, betLine, BetStatus.Open);
             book.bets.push(bet);
             bid.amount -= betAmount;
         }
@@ -68,6 +121,8 @@ contract SportsBet {
 
         // Use leftover funds to place open bids (maker)
         addBidToStack(bid, bidStack);
+
+        return true;
 
     }
 

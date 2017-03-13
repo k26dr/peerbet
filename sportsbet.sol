@@ -161,7 +161,7 @@ contract SportsBet {
         if (msg.sender == owner) selfdestruct(owner);
     }
 
-    function getGameId (string home, string away, string category, uint64 locktime) returns (bytes32) {
+    function getGameId (string home, string away, string category, uint64 locktime) private returns (bytes32) {
         uint i;
         bytes memory a = bytes(home);
         bytes memory b = bytes(away);

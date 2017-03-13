@@ -36,6 +36,10 @@ contract SportsBet is owned, mortal {
     Game[] public games;
     mapping(address => uint) private balances;
 
+    function SportsBet() returns (bool success) {
+        return true;
+    }
+
     function bidSpread(bytes32 game_id, bool home, int64 line) payable {
         Game game = getGameById(game_id);
         Book book = game.books[BetType.Spread];
@@ -51,7 +55,38 @@ contract SportsBet is owned, mortal {
 
     }
 
-    function matchBidToStack(Bid bid, Bid[] stack, home) {
+    function cancelBid(address bidder, bytes32 game_id, uint64 line, bool home) returns (bool success) {
+        Game game = getGameById(game_id);
+        Book book = game.books[BetType.Spread];
+        Bid[] stack = home ? book.homeBids : book.awayBids;
+        bool found = true;
+        uint i = 0;
+
+        // Delete bid in stack, refund amount to user
+        while (i < stack.length) {
+            if (stack[i].bidder == bidder && stack[i].line == line) {
+                balances[bidder] += stack[i].amount;
+                delete stack[i];
+                found = true;
+                break;
+            }
+            i++;
+        }
+
+        if (!found)
+            return false;
+
+        // Shift all succeeding bids up
+        // WARNING: This is a potentially expensive operation because of all the storage rewrites
+        // This should re-written to be more gas-efficient process later
+        while (i < stack.length - 1) {
+            stack[i] = stack[i+1];
+        }
+        return true;
+
+    }
+
+    function matchBidToStack(Bid bid, Bid[] stack, home) private {
         for (uint i = stack.length - 1; 
             -stack[i].line >= bid.line && bid.amount > 0 && i >= 0;
             i--)
@@ -69,7 +104,7 @@ contract SportsBet is owned, mortal {
         return bid;
     }
 
-    function addBidToStack(Bid bid, Bid[] stack) {
+    function addBidToStack(Bid bid, Bid[] stack) private {
         uint i = stack.length - 1;
         stack.push(bid) # just to make the stack one item larger
         while (stack[i].amount <= bid.amount && i > 0) {
@@ -102,5 +137,6 @@ contract SportsBet is owned, mortal {
             balances[msg.sender] = balance;
             throw;
         }
+        return true;
     }
 }

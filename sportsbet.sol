@@ -35,31 +35,31 @@ contract SportsBet {
         bytes32 id;
         string home;
         string away;
+        string category;
         uint locktime;
         GameStatus status;
-        string category;
         mapping(uint => Book) books;
         GameResult result;
     }
 
     address owner;
-    Game[] public games;
+    Game[] games;
     mapping(address => uint) private balances;
 
     function SportsBet() {
         address owner = msg.sender;
     }
 
-    function createGame (string home, string away, uint locktime, string category) {
+    function createGame (string home, string away, string category, uint locktime) {
         if (msg.sender != owner) throw;
-        bytes32 id = keccak256(bytes(home) + bytes(away) + bytes(locktime));
-        mapping(uint => Books) books;
+        bytes32 id = getGameId(home, away, category, locktime);
+        mapping(uint => Book) books;
         Bid[] homeBids;
         Bid[] awayBids;
         Bet[] bets;
         books[uint(BookType.Spread)] = Book(homeBids, awayBids, bets);
         GameResult result = GameResult(0,0);
-        Game game = Game(id, home, away, locktime, GameStatus.Open, category, books);
+        Game game = Game(id, home, away, category, locktime, GameStatus.Open, books);
         games.push(game);
     }
 
@@ -72,9 +72,10 @@ contract SportsBet {
         game.status = GameStatus.Scored;
 
         // Currently only handles spread bets
-        Bets[] bets = Game.books[uint(BookType.Spread)].bets;
+        Bet[] bets = Game.books[uint(BookType.Spread)].bets;
         uint resultSpread = awayScore - homeScore;
         for (uint i = 0; i < bets.length; i++) {
+            Bet bet = bets[i];
             if (resultSpread > bet.line) 
                 balances[bet.away] += bet.amount * 2;
             else if (resultSpread < bet.line)
@@ -160,6 +161,22 @@ contract SportsBet {
     function kill () {
         if (msg.sender == owner) selfdestruct(owner);
     }
+
+    function getGameId (string home, string away, string category, uint locktime) returns (bytes32) {
+        bytes memory a = bytes(home)
+        bytes memory b = bytes(away);
+        bytes memory c = bytes(category);
+        bytes memory d = bytes(locktime);
+        uint length = a.length + b.length + c.length + d.length;
+        bytes toHash = new bytes(length);
+        for (uint i = 0; i < a.length; i++, k++) toHash[k] = a[i];
+        for (uint i = 0; i < b.length; i++, k++) toHash[k] = b[i];
+        for (uint i = 0; i < c.length; i++, k++) toHash[k] = c[i];
+        for (uint i = 0; i < d.length; i++, k++) toHash[k] = d[i];
+        
+        return keccak256(toHash);
+    }
+        
 
     function addBidToStack(Bid bid, Bid[] storage stack) private {
         uint i = stack.length - 1;

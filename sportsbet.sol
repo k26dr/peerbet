@@ -36,7 +36,7 @@ contract SportsBet {
         string home;
         string away;
         string category;
-        uint locktime;
+        uint64 locktime;
         GameStatus status;
         mapping(uint => Book) books;
         GameResult result;
@@ -50,16 +50,15 @@ contract SportsBet {
         address owner = msg.sender;
     }
 
-    function createGame (string home, string away, string category, uint locktime) {
+	function createGame (string home, string away, string category, uint64 locktime) {
         if (msg.sender != owner) throw;
         bytes32 id = getGameId(home, away, category, locktime);
         mapping(uint => Book) books;
-        Bid[] homeBids;
-        Bid[] awayBids;
-        Bet[] bets;
-        books[uint(BookType.Spread)] = Book(homeBids, awayBids, bets);
-        GameResult result = GameResult(0,0);
-        Game game = Game(id, home, away, category, locktime, GameStatus.Open, books);
+        Bid[] memory homeBids;
+        Bid[] memory awayBids;
+        Bet[] memory bets;
+        GameResult memory result = GameResult(0,0);
+        Game memory game = Game(id, home, away, category, locktime, GameStatus.Open, result);
         games.push(game);
     }
 
@@ -72,8 +71,8 @@ contract SportsBet {
         game.status = GameStatus.Scored;
 
         // Currently only handles spread bets
-        Bet[] bets = Game.books[uint(BookType.Spread)].bets;
-        uint resultSpread = awayScore - homeScore;
+        Bet[] bets = game.books[uint(BookType.Spread)].bets;
+        int resultSpread = awayScore - homeScore;
         for (uint i = 0; i < bets.length; i++) {
             Bet bet = bets[i];
             if (resultSpread > bet.line) 
@@ -162,17 +161,20 @@ contract SportsBet {
         if (msg.sender == owner) selfdestruct(owner);
     }
 
-    function getGameId (string home, string away, string category, uint locktime) returns (bytes32) {
-        bytes memory a = bytes(home)
+    function getGameId (string home, string away, string category, uint64 locktime) returns (bytes32) {
+        uint i;
+        bytes memory a = bytes(home);
         bytes memory b = bytes(away);
         bytes memory c = bytes(category);
-        bytes memory d = bytes(locktime);
+        bytes4 d = bytes4(locktime);
+
         uint length = a.length + b.length + c.length + d.length;
-        bytes toHash = new bytes(length);
-        for (uint i = 0; i < a.length; i++, k++) toHash[k] = a[i];
-        for (uint i = 0; i < b.length; i++, k++) toHash[k] = b[i];
-        for (uint i = 0; i < c.length; i++, k++) toHash[k] = c[i];
-        for (uint i = 0; i < d.length; i++, k++) toHash[k] = d[i];
+        bytes memory toHash = new bytes(length);
+        uint k = 0;
+        for (i = 0; i < a.length; i++) { k++; toHash[k] = a[i]; }
+        for (i = 0; i < b.length; i++) { k++; toHash[k] = b[i]; }
+        for (i = 0; i < c.length; i++) { k++; toHash[k] = c[i]; }
+        for (i = 0; i < d.length; i++) { k++; toHash[k] = d[i]; }
         
         return keccak256(toHash);
     }

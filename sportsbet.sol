@@ -5,7 +5,9 @@ contract SportsBet {
     enum BookType { Spread, MoneyLine, OverUnder }
     enum BetStatus { Open, Paid }
 
-    event Test();
+    event GameCreated(bytes32 id, string home, string away, string category, uint64 locktime);
+    event BidPlaced(bytes32 game_id, BookType book, address bidder, uint amount, bool home, int64 line);
+    event BetPlaced(bytes32 game_id, BookType book, address home, address away, uint amount, int64 line);
 
     struct Bid {
         address bidder;
@@ -46,13 +48,13 @@ contract SportsBet {
 
     address public owner;
     Game[] games;
-    mapping(address => uint) private balances;
+    mapping(address => uint) public balances;
 
     function SportsBet() {
-        address owner = msg.sender;
+        owner = msg.sender;
     }
 
-	function createGame (string home, string away, string category, uint64 locktime) {
+	function createGame (string home, string away, string category, uint64 locktime) returns (bytes32) {
         if (msg.sender != owner) throw;
         bytes32 id = getGameId(home, away, category, locktime);
         mapping(uint => Book) books;
@@ -62,6 +64,8 @@ contract SportsBet {
         GameResult memory result = GameResult(0,0);
         Game memory game = Game(id, home, away, category, locktime, GameStatus.Open, result);
         games.push(game);
+        GameCreated(id, home, away, category, locktime);
+        return id;
     }
 
     function setGameResult (bytes32 game_id, int homeScore, int awayScore) {
@@ -117,12 +121,16 @@ contract SportsBet {
             delete matchStack[i];
             Bet memory bet = Bet(homeAddress, awayAddress, betAmount, betLine, BetStatus.Open);
             book.bets.push(bet);
+            BetPlaced(game_id, BookType.Spread, homeAddress, awayAddress, betAmount, betLine);
             bid.amount -= betAmount;
         }
 
 
         // Use leftover funds to place open bids (maker)
-        addBidToStack(bid, bidStack);
+        if (bid.amount > 0) {
+            addBidToStack(bid, bidStack);
+            BidPlaced(game_id, BookType.Spread, msg.sender, msg.value, home, line);
+        }
 
         return true;
 
@@ -163,21 +171,8 @@ contract SportsBet {
         if (msg.sender == owner) selfdestruct(owner);
     }
 
-    function test (string home, string away, string category, uint64 locktime) constant returns (uint) {
-        uint i = 0;
-        bytes memory a = bytes(home);
-        bytes memory b = bytes(away);
-        bytes memory c = bytes(category);
-        bytes8 d = bytes8(locktime);
-
-        uint length = a.length + b.length + c.length + d.length;
-        return length;
-        bytes memory toHash = new bytes(length);
-        uint k = 0;
-        for (i = 0; i < a.length; i++) { k++; toHash[k] = a[i]; }
-        for (i = 0; i < b.length; i++) { k++; toHash[k] = b[i]; }
-        for (i = 0; i < c.length; i++) { k++; toHash[k] = c[i]; }
-        for (i = 0; i < d.length; i++) { k++; toHash[k] = d[i]; }
+    function test () constant returns (address) {
+        return owner;
     }
 
     function getGameId (string home, string away, string category, uint64 locktime) constant returns (bytes32) {
@@ -234,7 +229,4 @@ contract SportsBet {
         return true;
     }
 
-    function () {
-        Test();
-    }
 }

@@ -5,9 +5,9 @@ contract SportsBet {
     enum BookType { Spread, MoneyLine, OverUnder }
     enum BetStatus { Open, Paid }
 
-    event GameCreated(bytes32 id, string home, string away, string category, uint64 locktime);
-    event BidPlaced(bytes32 game_id, BookType book, address bidder, uint amount, bool home, int64 line);
-    event BetPlaced(bytes32 game_id, BookType book, address home, address away, uint amount, int64 line);
+    event GameCreated(bytes32 id, string home, string away, string indexed category, uint64 locktime);
+    event BidPlaced(bytes32 indexed game_id, BookType book, address bidder, uint amount, bool home, int64 line);
+    event BetPlaced(bytes32 indexed game_id, BookType book, address home, address away, uint amount, int64 line);
 
     struct Bid {
         address bidder;
@@ -98,8 +98,6 @@ contract SportsBet {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
         Bid memory bid = Bid(msg.sender, msg.value, home, line);
-        Bid[] matchStack = home ?  book.awayBids : book.homeBids;
-        Bid[] bidStack = home ? book.homeBids : book.awayBids;
 
         // check game locktime
         if (game.status == GameStatus.Locked)
@@ -109,7 +107,21 @@ contract SportsBet {
             return false;
         }
 
-        // Match existing bets (taker)
+        Bid memory remainingBid = matchExistingBids(bid, book, home, game_id);
+
+        // Use leftover funds to place open bids (maker)
+        if (bid.amount > 0) {
+            Bid[] bidStack = home ? book.homeBids : book.awayBids;
+            addBidToStack(remainingBid, bidStack);
+            BidPlaced(game_id, BookType.Spread, msg.sender, msg.value, home, line);
+        }
+
+        return true;
+
+    }
+
+    function matchExistingBids(Bid bid, Book storage book, bool home, bytes32 game_id) private returns (Bid) {
+        Bid[] matchStack = home ?  book.awayBids : book.homeBids;
         for (uint i = matchStack.length - 1; 
             -matchStack[i].line >= bid.line && bid.amount > 0 && i >= 0;
             i--)
@@ -124,16 +136,7 @@ contract SportsBet {
             BetPlaced(game_id, BookType.Spread, homeAddress, awayAddress, betAmount, betLine);
             bid.amount -= betAmount;
         }
-
-
-        // Use leftover funds to place open bids (maker)
-        if (bid.amount > 0) {
-            addBidToStack(bid, bidStack);
-            BidPlaced(game_id, BookType.Spread, msg.sender, msg.value, home, line);
-        }
-
-        return true;
-
+        return bid;
     }
 
     function cancelBid(address bidder, bytes32 game_id, int64 line, bool home) returns (bool) {

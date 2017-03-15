@@ -42,7 +42,7 @@ contract SportsBet {
         GameResult result;
     }
 
-    address owner;
+    address public owner;
     Game[] games;
     mapping(address => uint) private balances;
 
@@ -161,8 +161,12 @@ contract SportsBet {
         if (msg.sender == owner) selfdestruct(owner);
     }
 
-    function getGameId (string home, string away, string category, uint64 locktime) private returns (bytes32) {
-        uint i;
+    function test() returns (address) {
+        return owner;
+    }
+
+    function getGameId (string home, string away, string category, uint64 locktime) constant returns (bytes32) {
+        uint i = 0;
         bytes memory a = bytes(home);
         bytes memory b = bytes(away);
         bytes memory c = bytes(category);

@@ -1,3 +1,7 @@
 npm-debug.log
 bin/
 node_modules/
+*.swp
+bytecode
+contract_address
+abi.json

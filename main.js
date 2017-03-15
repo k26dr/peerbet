@@ -16,7 +16,11 @@ $.when(contractAddressPromise, abiPromise, docReady).then(function (contractAddr
         gas: 4700000,
     }
 
+    contract.test.call(console.log);
+    debugger;
     contract.getGameId.sendTransaction('patriots', 'ravens', 'nfl', '100', tx, console.log);
+    web3.eth.getBlock(4444, console.log);
+    contract.Test().get(console.log);
 
 })
 

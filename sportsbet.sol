@@ -5,6 +5,8 @@ contract SportsBet {
     enum BookType { Spread, MoneyLine, OverUnder }
     enum BetStatus { Open, Paid }
 
+    event Test();
+
     struct Bid {
         address bidder;
         uint amount; /* in wei */
@@ -161,8 +163,21 @@ contract SportsBet {
         if (msg.sender == owner) selfdestruct(owner);
     }
 
-    function test() returns (address) {
-        return owner;
+    function test (string home, string away, string category, uint64 locktime) constant returns (uint) {
+        uint i = 0;
+        bytes memory a = bytes(home);
+        bytes memory b = bytes(away);
+        bytes memory c = bytes(category);
+        bytes8 d = bytes8(locktime);
+
+        uint length = a.length + b.length + c.length + d.length;
+        return length;
+        bytes memory toHash = new bytes(length);
+        uint k = 0;
+        for (i = 0; i < a.length; i++) { k++; toHash[k] = a[i]; }
+        for (i = 0; i < b.length; i++) { k++; toHash[k] = b[i]; }
+        for (i = 0; i < c.length; i++) { k++; toHash[k] = c[i]; }
+        for (i = 0; i < d.length; i++) { k++; toHash[k] = d[i]; }
     }
 
     function getGameId (string home, string away, string category, uint64 locktime) constant returns (bytes32) {
@@ -170,17 +185,17 @@ contract SportsBet {
         bytes memory a = bytes(home);
         bytes memory b = bytes(away);
         bytes memory c = bytes(category);
-        bytes4 d = bytes4(locktime);
+        bytes8 d = bytes8(locktime);
 
         uint length = a.length + b.length + c.length + d.length;
         bytes memory toHash = new bytes(length);
         uint k = 0;
-        for (i = 0; i < a.length; i++) { k++; toHash[k] = a[i]; }
-        for (i = 0; i < b.length; i++) { k++; toHash[k] = b[i]; }
-        for (i = 0; i < c.length; i++) { k++; toHash[k] = c[i]; }
-        for (i = 0; i < d.length; i++) { k++; toHash[k] = d[i]; }
-        
+        for (i = 0; i < a.length; i++) { toHash[k] = a[i]; k++; }
+        for (i = 0; i < b.length; i++) { toHash[k] = b[i]; k++; }
+        for (i = 0; i < c.length; i++) { toHash[k] = c[i]; k++; }
+        for (i = 0; i < d.length; i++) { toHash[k] = d[i]; k++; }
         return keccak256(toHash);
+        
     }
         
 
@@ -217,5 +232,9 @@ contract SportsBet {
             return false;
         }
         return true;
+    }
+
+    function () {
+        Test();
     }
 }

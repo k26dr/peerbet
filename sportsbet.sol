@@ -5,7 +5,8 @@ contract SportsBet {
     enum BookType { Spread, MoneyLine, OverUnder }
     enum BetStatus { Open, Paid }
 
-    event GameCreated(bytes32 id, string home, string away, string indexed category, uint64 locktime);
+    // indexing on a string causes issues with web3, so category has to be an int
+    event GameCreated(bytes32 id, string home, string away, uint16 indexed category, uint64 locktime);
     event BidPlaced(bytes32 indexed game_id, BookType book, address bidder, uint amount, bool home, int64 line);
     event BetPlaced(bytes32 indexed game_id, BookType book, address home, address away, uint amount, int64 line);
 
@@ -39,7 +40,7 @@ contract SportsBet {
         bytes32 id;
         string home;
         string away;
-        string category;
+        uint16 category;
         uint64 locktime;
         GameStatus status;
         mapping(uint => Book) books;
@@ -54,7 +55,7 @@ contract SportsBet {
         owner = msg.sender;
     }
 
-	function createGame (string home, string away, string category, uint64 locktime) returns (bytes32) {
+	function createGame (string home, string away, uint16 category, uint64 locktime) returns (bytes32) {
         if (msg.sender != owner) throw;
         bytes32 id = getGameId(home, away, category, locktime);
         mapping(uint => Book) books;
@@ -178,11 +179,11 @@ contract SportsBet {
         return owner;
     }
 
-    function getGameId (string home, string away, string category, uint64 locktime) constant returns (bytes32) {
+    function getGameId (string home, string away, uint16 category, uint64 locktime) constant returns (bytes32) {
         uint i = 0;
         bytes memory a = bytes(home);
         bytes memory b = bytes(away);
-        bytes memory c = bytes(category);
+        bytes2 c = bytes2(category);
         bytes8 d = bytes8(locktime);
 
         uint length = a.length + b.length + c.length + d.length;

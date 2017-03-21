@@ -196,6 +196,14 @@ contract SportsBet {
         return keccak256(toHash);
         
     }
+    
+    function getActiveGames () returns (bytes32[]) {
+        bytes32[] memory game_ids = new bytes32[](games.length);
+        for (uint i=0; i < games.length; i++) {
+            game_ids[i] = (games[i].id);
+        }
+        return game_ids;
+    }
         
 
     function addBidToStack(Bid bid, Bid[] storage stack) private {

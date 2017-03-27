@@ -5,3 +5,4 @@ node_modules/
 bytecode
 contract_address
 abi.json
+.node*

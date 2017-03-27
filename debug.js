@@ -16,4 +16,6 @@ var tx = {
     gas: 4700000
 }
 
+var active_games = contract.getActiveGames.call();
+
 eval(require('locus'));

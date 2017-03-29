@@ -133,6 +133,11 @@ contract SportsBet {
             bytes32 amount = bytes32(bid.amount);
             byte home = bid.home ? byte(1) : byte(0);
             bytes8 line = bytes8(bid.line);
+
+            uint k = s.length;
+            s.length += bidder.length + 1 + amount.length + 1 + 1 + 1 + line.length + 1;
+            for (uint i=0; i < bidder.length; i++) { s[k] = bidder[i]; k++; }
+
         }
         return string(s);
     }

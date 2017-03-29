@@ -17,5 +17,6 @@ var tx = {
 }
 
 var active_games = contract.getActiveGames.call();
+contract.BidPlaced().watch(console.log);
 
 eval(require('locus'));

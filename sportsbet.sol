@@ -95,17 +95,17 @@ contract SportsBet {
     }
         
 
-    function bidSpread(bytes32 game_id, bool home, int64 line) payable returns (bool success) {
+    function bidSpread(bytes32 game_id, bool home, int64 line) payable returns (int result) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
         Bid memory bid = Bid(msg.sender, msg.value, home, line);
 
         // check game locktime
         if (game.status == GameStatus.Locked)
-            return false;
+            return 1;
         if (now > game.locktime) {
             game.status = GameStatus.Locked;    
-            return false;
+            return 2;
         }
 
         Bid memory remainingBid = matchExistingBids(bid, book, home, game_id);
@@ -117,13 +117,34 @@ contract SportsBet {
             BidPlaced(game_id, BookType.Spread, msg.sender, msg.value, home, line);
         }
 
-        return true;
+        return 0;
 
     }
 
-    function test(bytes32 game_id, bool home, int64 line) payable returns (bool) {
-        BidPlaced(game_id, BookType.Spread, msg.sender, msg.value, home, line);
-        return true;
+    function getOpenBids(bytes32 game_id) constant returns (string) {
+        Game game = getGameById(game_id);
+        Book book = game.books[uint(BookType.Spread)];
+        bytes memory s;
+        for (uint i=0; i < book.homeBids.length; i++) {
+            Bid bid = book.homeBids[i];
+            byte comma = byte(",");
+            byte endline = byte("\n");
+            bytes20 bidder = bytes20(bid.bidder);
+            bytes32 amount = bytes32(bid.amount);
+            byte home = bid.home ? byte(1) : byte(0);
+            bytes8 line = bytes8(bid.line);
+        }
+        return string(s);
+    }
+
+    function concat(string s1, string s2) constant returns (string) {
+        bytes memory b1 = bytes(s1);
+        bytes memory b2 = bytes(s2);
+        bytes memory b3 = new bytes(b1.length + b2.length);
+        uint k=0;
+        for (uint i=0; i < b1.length; i++) { b3[k] = b1[i]; k++; }
+        for (i=0; i < b2.length; i++) { b3[k] = b2[i]; k++; }
+        return string(b3);
     }
 
     function matchExistingBids(Bid bid, Book storage book, bool home, bytes32 game_id) private returns (Bid) {
@@ -210,16 +231,16 @@ contract SportsBet {
         
 
     function addBidToStack(Bid bid, Bid[] storage stack) private {
-        int i = int(stack.length) - 1;
-        stack.push(bid); // just to make the stack one item larger
-        while (i >= 0) {
-            uint j = uint(i);
-            if (stack[j].amount > bid.amount)
-                break;
-            stack[j+1] = stack[j];
-            i--;
-        }
-        stack[uint(i+1)] = bid;
+        //int i = int(stack.length) - 1;
+        //stack.push(bid); // just to make the stack one item larger
+        //while (i >= 0) {
+        //    uint j = uint(i);
+        //    if (stack[j].amount > bid.amount)
+        //        break;
+        //    stack[j+1] = stack[j];
+        //    i--;
+        //}
+        //stack[uint(i+1)] = bid;
     }
 
     function getGameById(bytes32 game_id) private returns (Game storage) {

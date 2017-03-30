@@ -114,30 +114,29 @@ contract SportsBet {
         if (bid.amount > 0) {
             Bid[] bidStack = home ? book.homeBids : book.awayBids;
             addBidToStack(remainingBid, bidStack);
-            BidPlaced(game_id, BookType.Spread, msg.sender, msg.value, home, line);
+            BidPlaced(game_id, BookType.Spread, remainingBid.bidder, remainingBid.amount, home, line);
         }
 
         return 0;
-
     }
 
     // returning an array of structs is not allowed, so its time for a hackjob
     function getOpenBids(bytes32 game_id) constant returns (bytes) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
-        bytes memory s = new bytes(60 * book.homeBids.length);
+        bytes memory s = new bytes(57 * book.homeBids.length);
         uint k = 0;
         for (uint i=0; i < book.homeBids.length; i++) {
             Bid bid = book.homeBids[i];
             bytes20 bidder = bytes20(bid.bidder);
             bytes32 amount = bytes32(bid.amount);
             byte home = bid.home ? byte(1) : byte(0);
-            bytes8 line = bytes8(bid.line);
+            bytes4 line = bytes4(int32(bid.line));
 
-            for (uint j=0; j < bidder.length; j++) { s[k] = bidder[j]; k++; }
+            for (uint j=0; j < 20; j++) { s[k] = bidder[j]; k++; }
             for (j=0; j < 32; j++) { s[k] = amount[j]; k++; }
             s[k] = home; k++;
-            for (j=0; j < 8; j++) { s[k] = line[j]; k++; }
+            for (j=0; j < 4; j++) { s[k] = line[j]; k++; }
 
         }
         return s;
@@ -160,6 +159,10 @@ contract SportsBet {
             uint j = uint(i);
             if (-bid.line < matchStack[j].line)
                 break;
+            if (matchStack[j].amount == 0) { // deleted bids
+                i--;
+                continue;
+            }
             address homeAddress = home ? bid.bidder : matchStack[j].bidder;
             address awayAddress = home ? matchStack[j].bidder : bid.bidder;
             uint betAmount = bid.amount < matchStack[j].amount ? bid.amount : matchStack[j].amount;

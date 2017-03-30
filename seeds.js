@@ -32,11 +32,12 @@ games.forEach(function (game) {
 
 var active_games = games.map(g => contract.getGameId.call(...g));
 
-//for (var i=0; i < 200; i++) {
-//    var random_index = Math.floor(Math.random() * active_games.length);
-//    var random_amount = Math.floor(Math.random() * 100000);
-//    var random_line = [-200, -100, 100, 200][Math.floor(Math.random() * 4)];
-//    var home = Math.random() > 0.5;
-//    contract.bidSpread.sendTransaction(active_games[random_index], home, random_line, { from: walletAddress, value: random_amount });
-//}
+for (var i=0; i < 0; i++) {
+    var random_index = Math.floor(Math.random() * active_games.length);
+    var random_index = 0;
+    var random_amount = Math.floor(Math.random() * 100000);
+    var random_line = [-200, -100, 100, 200][Math.floor(Math.random() * 4)];
+    var home = Math.random() > 0.5;
+    contract.bidSpread.sendTransaction(active_games[random_index], home, random_line, { from: walletAddress, value: random_amount , gas: 500000 });
+}
 

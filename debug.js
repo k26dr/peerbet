@@ -16,7 +16,22 @@ var tx = {
     gas: 4700000
 }
 
-var active_games = contract.getActiveGames.call();
+function getActiveGames() {
+    active_games = contract.getActiveGames.call();
+    if (active_games.length == 0)
+        setTimeout(getActiveGames, 100);
+}
+
+function parseTransaction(hex) {
+    return {
+        bidder: hex.substring(0,40),
+        amount: hex.substring(40,104),
+        home: hex.susbtring(104,106),
+        line: ~~parseInt(hex.substring(107))
+    }
+}
+getActiveGames()
 contract.BidPlaced().watch(console.log);
+contract.BetPlaced().watch(console.log);
 
 eval(require('locus'));

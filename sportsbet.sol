@@ -121,25 +121,26 @@ contract SportsBet {
 
     }
 
-    function getOpenBids(bytes32 game_id) constant returns (string) {
+    // returning an array of structs is not allowed, so its time for a hackjob
+    function getOpenBids(bytes32 game_id) constant returns (bytes) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
-        bytes memory s;
+        bytes memory s = new bytes(60 * book.homeBids.length);
+        uint k = 0;
         for (uint i=0; i < book.homeBids.length; i++) {
             Bid bid = book.homeBids[i];
-            byte comma = byte(",");
-            byte endline = byte("\n");
             bytes20 bidder = bytes20(bid.bidder);
             bytes32 amount = bytes32(bid.amount);
             byte home = bid.home ? byte(1) : byte(0);
             bytes8 line = bytes8(bid.line);
 
-            uint k = s.length;
-            s.length += bidder.length + 1 + amount.length + 1 + 1 + 1 + line.length + 1;
-            for (uint i=0; i < bidder.length; i++) { s[k] = bidder[i]; k++; }
+            for (uint j=0; j < bidder.length; j++) { s[k] = bidder[j]; k++; }
+            for (j=0; j < 32; j++) { s[k] = amount[j]; k++; }
+            s[k] = home; k++;
+            for (j=0; j < 8; j++) { s[k] = line[j]; k++; }
 
         }
-        return string(s);
+        return s;
     }
 
     function concat(string s1, string s2) constant returns (string) {
@@ -236,16 +237,16 @@ contract SportsBet {
         
 
     function addBidToStack(Bid bid, Bid[] storage stack) private {
-        //int i = int(stack.length) - 1;
-        //stack.push(bid); // just to make the stack one item larger
-        //while (i >= 0) {
-        //    uint j = uint(i);
-        //    if (stack[j].amount > bid.amount)
-        //        break;
-        //    stack[j+1] = stack[j];
-        //    i--;
-        //}
-        //stack[uint(i+1)] = bid;
+        int i = int(stack.length) - 1;
+        stack.push(bid); // just to make the stack one item larger
+        while (i >= 0) {
+            uint j = uint(i);
+            if (stack[j].amount > bid.amount)
+                break;
+            stack[j+1] = stack[j];
+            i--;
+        }
+        stack[uint(i+1)] = bid;
     }
 
     function getGameById(bytes32 game_id) private returns (Game storage) {

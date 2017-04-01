@@ -7,21 +7,21 @@ contract SportsBet {
 
     // indexing on a string causes issues with web3, so category has to be an int
     event GameCreated(bytes32 id, string home, string away, uint16 indexed category, uint64 locktime);
-    event BidPlaced(bytes32 indexed game_id, BookType book, address bidder, uint amount, bool home, int64 line);
-    event BetPlaced(bytes32 indexed game_id, BookType book, address home, address away, uint amount, int64 line);
+    event BidPlaced(bytes32 indexed game_id, BookType book, address bidder, uint amount, bool home, int32 line);
+    event BetPlaced(bytes32 indexed game_id, BookType book, address home, address away, uint amount, int32 line);
 
     struct Bid {
         address bidder;
         uint amount; /* in wei */
         bool home; /* true=home, false=away */
-        int64 line;
+        int32 line;
     }
 
     struct Bet {
         address home;
         address away;
         uint amount; /* in wei */
-        int64 line;
+        int32 line;
         BetStatus status;
     }
 
@@ -95,7 +95,7 @@ contract SportsBet {
     }
         
 
-    function bidSpread(bytes32 game_id, bool home, int64 line) payable returns (int result) {
+    function bidSpread(bytes32 game_id, bool home, int32 line) payable returns (int) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
         Bid memory bid = Bid(msg.sender, msg.value, home, line);
@@ -113,25 +113,30 @@ contract SportsBet {
         // Use leftover funds to place open bids (maker)
         if (bid.amount > 0) {
             Bid[] bidStack = home ? book.homeBids : book.awayBids;
-            addBidToStack(remainingBid, bidStack);
+            int result = addBidToStack(remainingBid, bidStack);
             BidPlaced(game_id, BookType.Spread, remainingBid.bidder, remainingBid.amount, home, line);
         }
 
-        return 0;
+        return -1;
     }
 
     // returning an array of structs is not allowed, so its time for a hackjob
     function getOpenBids(bytes32 game_id) constant returns (bytes) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
-        bytes memory s = new bytes(57 * book.homeBids.length);
+        uint nBids = book.homeBids.length + book.awayBids.length;
+        bytes memory s = new bytes(57 * nBids);
         uint k = 0;
-        for (uint i=0; i < book.homeBids.length; i++) {
-            Bid bid = book.homeBids[i];
+        for (uint i=0; i < nBids; i++) {
+            Bid bid;
+            if (i < book.homeBids.length)
+                bid = book.homeBids[i];
+            else
+                bid = book.awayBids[i - book.homeBids.length];
             bytes20 bidder = bytes20(bid.bidder);
             bytes32 amount = bytes32(bid.amount);
             byte home = bid.home ? byte(1) : byte(0);
-            bytes4 line = bytes4(int32(bid.line));
+            bytes4 line = bytes4(bid.line);
 
             for (uint j=0; j < 20; j++) { s[k] = bidder[j]; k++; }
             for (j=0; j < 32; j++) { s[k] = amount[j]; k++; }
@@ -139,45 +144,45 @@ contract SportsBet {
             for (j=0; j < 4; j++) { s[k] = line[j]; k++; }
 
         }
+
         return s;
     }
-
-    function concat(string s1, string s2) constant returns (string) {
-        bytes memory b1 = bytes(s1);
-        bytes memory b2 = bytes(s2);
-        bytes memory b3 = new bytes(b1.length + b2.length);
-        uint k=0;
-        for (uint i=0; i < b1.length; i++) { b3[k] = b1[i]; k++; }
-        for (i=0; i < b2.length; i++) { b3[k] = b2[i]; k++; }
-        return string(b3);
-    }
-
+    
     function matchExistingBids(Bid bid, Book storage book, bool home, bytes32 game_id) private returns (Bid) {
         Bid[] matchStack = home ?  book.awayBids : book.homeBids;
         int i = int(matchStack.length) - 1;
         while (i >= 0 && bid.amount > 0) {
             uint j = uint(i);
-            if (-bid.line < matchStack[j].line)
-                break;
             if (matchStack[j].amount == 0) { // deleted bids
                 i--;
                 continue;
             }
+            if (-bid.line < matchStack[j].line)
+                break;
+
             address homeAddress = home ? bid.bidder : matchStack[j].bidder;
             address awayAddress = home ? matchStack[j].bidder : bid.bidder;
-            uint betAmount = bid.amount < matchStack[j].amount ? bid.amount : matchStack[j].amount;
-            int64 betLine = home ? -matchStack[j].line : matchStack[j].line;
-            delete matchStack[j];
+            int32 betLine = home ? -matchStack[j].line : matchStack[j].line;
+            uint betAmount;
+            if (bid.amount < matchStack[j].amount) {
+                betAmount = bid.amount;
+                matchStack[j].amount -= betAmount;
+            }
+            else {
+                betAmount = matchStack[j].amount;
+                delete matchStack[j];
+            }
+            bid.amount -= betAmount;
+
             Bet memory bet = Bet(homeAddress, awayAddress, betAmount, betLine, BetStatus.Open);
             book.bets.push(bet);
             BetPlaced(game_id, BookType.Spread, homeAddress, awayAddress, betAmount, betLine);
-            bid.amount -= betAmount;
             i--;
         }
         return bid;
     }
 
-    function cancelBid(address bidder, bytes32 game_id, int64 line, bool home) returns (bool) {
+    function cancelBid(address bidder, bytes32 game_id, int32 line, bool home) returns (bool) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
         Bid[] stack = home ? book.homeBids : book.awayBids;
@@ -198,14 +203,7 @@ contract SportsBet {
         if (!found)
             return false;
 
-        // Shift all succeeding bids up
-        // WARNING: This is a potentially expensive operation because of all the storage rewrites
-        // This should re-written to be more gas-efficient process later
-        while (i < stack.length - 1) {
-            stack[i] = stack[i+1];
-        }
         return true;
-
     }
 
     function kill () {
@@ -239,19 +237,35 @@ contract SportsBet {
     }
         
 
-    function addBidToStack(Bid bid, Bid[] storage stack) private {
-        int i = int(stack.length) - 1;
-        stack.push(bid); // just to make the stack one item larger
-        while (i >= 0) {
-            uint j = uint(i);
-            if (stack[j].amount > bid.amount)
+    function addBidToStack(Bid bid, Bid[] storage stack) private returns (int) {
+        stack.push(bid); // make stack one item larger
+
+        if (stack.length <= 1)
+            return 0;
+
+        // insert into sorted stack
+        uint i = stack.length - 2;
+        uint lastIndex = stack.length - 1;
+        while (true) {
+            if (stack[i].amount == 0) { // ignore deleted bids
+                i--;
+                continue;
+            }
+            if (stack[i].line > bid.line)
                 break;
-            stack[j+1] = stack[j];
+            stack[lastIndex] = stack[i];
+            lastIndex = i;
+
+            // uint exhibits undefined behavior when you take it negative
+            // so we have to break manually
+            if (i == 0) 
+                break;
             i--;
         }
-        stack[uint(i+1)] = bid;
+        stack[lastIndex] = bid;
+        return -1;
     }
-
+    
     function getGameById(bytes32 game_id) private returns (Game storage) {
         bool game_exists = false;
         for (uint i = 0; i < games.length; i++) {

@@ -22,16 +22,30 @@ function getActiveGames() {
         setTimeout(getActiveGames, 100);
 }
 
-function parseTransaction(hex) {
+function parseBid(hex) {
     return {
-        bidder: hex.substring(0,40),
-        amount: hex.substring(40,104),
-        home: hex.susbtring(104,106),
-        line: ~~parseInt(hex.substring(107))
+        bidder: '0x' + hex.slice(0,40),
+        amount: parseInt(hex.slice(40,104), 16),
+        home: parseInt(hex.slice(104,106)) == 1,
+        line: ~~parseInt(hex.slice(106), 16)
     }
 }
+
+function parseBids(hex) {
+    var bids = []
+    if (hex.slice(0,2) == '0x')
+        hex = hex.slice(2);
+    for (var i=0; i < hex. length; i += 114)
+        bids.push(parseBid(hex.substring(i, i+114)));
+
+    return bids.filter(bid => bid.amount > 0);
+}
+
+function watch () {
+    contract.BidPlaced().watch(console.log);
+    contract.BetPlaced().watch(console.log);
+}
+
 getActiveGames()
-contract.BidPlaced().watch(console.log);
-contract.BetPlaced().watch(console.log);
 
 eval(require('locus'));

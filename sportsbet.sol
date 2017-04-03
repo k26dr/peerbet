@@ -6,7 +6,7 @@ contract SportsBet {
     enum BetStatus { Open, Paid }
 
     // indexing on a string causes issues with web3, so category has to be an int
-    event GameCreated(bytes32 id, string home, string away, uint16 indexed category, uint64 locktime);
+    event GameCreated(bytes32 indexed id, string home, string away, uint16 indexed category, uint64 locktime);
     event BidPlaced(bytes32 indexed game_id, BookType book, address bidder, uint amount, bool home, int32 line);
     event BetPlaced(bytes32 indexed game_id, BookType book, address home, address away, uint amount, int32 line);
 

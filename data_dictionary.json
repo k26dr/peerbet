@@ -1,8 +1,4 @@
 {
-    "categories": [
-        "NFL",
-        "NBA"
-    ],
-    "book_types": {
-    }
+    "categories": [ "NFL", "NBA" ],
+    "book_types": [ "Spread", "MoneyLine", "OverUnder" ]
 }

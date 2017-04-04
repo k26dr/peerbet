@@ -2,53 +2,134 @@
 <head>
 
 <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="main.css">
 
 </head>
 
-<body>
+<body class="container">
 
 <section class="page" id="games">
     <h1>Games</h1>
-    <table id="games-table" class="table">
-        <tr>
-            <th>Home</th>
-            <th>Away</th>
-            <th>Category</th>
-            <th>Date</th>
-            <th>Time</th>
-            <th>Bets</th>
-        </tr>
+    <table id="games-table" class="table table-striped table-bordered">
+        <thead>
+            <tr>
+                <th>Home</th>
+                <th>Away</th>
+                <th>Category</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Bets</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
     </table>
 </section>
 
 <section class="page" id="spread">
-    <h1 class="matchup">___ vs ___</h1>
+    <h1>
+        <span class="home">Home</span> vs <span class="away">Away</span>
+    </h1>
     
-    <h3>Home Bids</h3>
-    <table id="home-bids-table" class="table">
-        <tr>
-            <th>Bidder</th>
-            <th>Amount</th>
-            <th>Line</th>
-        <tr>
-    </table>
+    <div class="row">
+        <div class="col-md-6">
+            <h3>Bet <span class="home">Home</span></h3>
+            <div class="form-group">
+                <label>Line</label>
+                <input type="number" step="0.5" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Amount (ETH)</label>
+                <input type="number" step="1" class="form-control">
+            </div>
+            <div class="form-group">
+                <button class="btn btn-primary">Place Bet</button>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <h3>Bet <span class="away">Away</span></h3>
+            <div class="form-group">
+                <label>Line</label>
+                <input type="number" step="0.5" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Amount (ETH)</label>
+                <input type="number" step="1" class="form-control">
+            </div>
+            <div class="form-group">
+                <button class="btn btn-primary">Place Bet</button>
+            </div>
+        </div>
+    </div>
 
-    <h3>Away Bids</h3>
-    <table id="away-bids-table" class="table">
-        <tr>
-            <th>Bidder</th>
-            <th>Amount</th>
-            <th>Line</th>
-        <tr>
-    </table>
+    <div class="row">
+        <div class="col-md-6">
+            <h3>Open <span class="home">Home</span> Bids</h3>
+            <table id="home-bids-table" class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Line</th>
+                        <th>Amount</th>
+                    <tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
 
-    <h3>Latest Bets</h3>
-    <table id="bets-table" class="table">
-        <tr>
-            <th>Line</th>
-            <th>Amount</th>
-        </tr>
-    </table>
+        <div class="col-md-6">
+            <h3>Open <span class="away">Away</span> Bids</h3>
+            <table id="away-bids-table" class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Line</th>
+                        <th>Amount</th>
+                    <tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <h3>Latest Bets</h3>
+            <table id="bets-table" class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Line (<span class="home">Home</span>)</th>
+                        <th>Amount</th>
+                    <tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="col-md-6">
+            <h3>My Bets</h3>
+            <table id="my-bets-table" class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Team</th>
+                        <th>Line</th>
+                        <th>Amount</th>
+                    <tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <h3>My Open Bids</h3>
+            <table id="my-bids-table" class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Team</th>
+                        <th>Line</th>
+                        <th>Amount</th>
+                    <tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
 </section>
 
 <script src="https://code.jquery.com/jquery-3.1.1.js"

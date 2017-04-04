@@ -1,12 +1,6 @@
 var docReady = $.Deferred();
 $(docReady.resolve);
 
-//var walletPromise = new Promise(function (resolve, reject) {
-//    mist.requestAccount(function (err, walletAddress) {
-//        if (err) reject(err);
-//        else resolve(walletAddress);
-//    })
-//})
 var abiPromise = $.get("abi.json");
 var contractAddressPromise = $.get("contract_address");
 var dictionaryPromise = $.get("data_dictionary.json");
@@ -46,13 +40,33 @@ function route(page, params) {
     }
 }
 
+function getWalletAddress () {
+    return new Promise(function (resolve, reject) {
+        // get cached if available
+        if (sessionStorage.walletAddress)
+            resolve(sessionStorage.walletAddress);
+        else {
+            mist.requestAccount(function (err, walletAddress) {
+                if (err) reject(err);
+                else {
+                    // cache then resolve
+                    sessionStorage.walletAddress = walletAddress[0];
+                    resolve(walletAddress[0]);
+                }
+            })
+        }
+    })
+}
+
 function getGames () {
     return new Promise(function (resolve, reject) {
+        // get cached if available
         if (getGames.prototype.games)
             resolve(getGames.prototype.games);
         else {
             contract.GameCreated({}, { fromBlock: 1 })
                 .get(function (err, logs) {
+                    // cache then resolve
                     getGames.prototype.games = logs.map(log => log.args);
                     resolve(getGames.prototype.games);
                 });
@@ -60,7 +74,15 @@ function getGames () {
     });
 }
 
+function getGame(id) {
+    return getGames().then(function (games) {
+        var game = games.filter(g => g.id == id)[0];
+        return game;
+    })
+}
+
 function gamesList () {
+    $("#games-table tbody").empty();
     getGames().then(function (games) {
         games.forEach(game => addGameFromLog(game, dictionary.categories));
     });
@@ -81,35 +103,82 @@ function addGameFromLog (game, categories) {
         <td>${time}</td>
         <td><a href="#spread_${game.id}">Spread</a></td>
     </tr>`
-    $("#games-table").append(row);
+    $("#games-table tbody").append(row);
 }
+
+function getBets(game_id) {
+    return new Promise(function (resolve, reject) {
+        contract.BetPlaced({ game_id: game_id }, { fromBlock: 1 })
+            .get(function (err, logs) {
+                var bets = logs.map(log => log.args);
+                resolve(bets);
+            });
+    });
+}
+
+// Need to index bets first
+function getPlayerBets(walletAddress, game_id) {
+    return new Promise(function (resolve, reject) {
+        contract.BetPlaced(
+            { home: walletAddress, away: walletAddress, game_id: game_id }, 
+            { fromBlock:1 }
+        ).get(function (err, logs) {
+            var bets = logs.map(log => log.args);
+            resolve(bets);
+        })
+    })
+}
+
+function getOpenBids(game_id) {
+    return new Promise(function (resolve, reject) {
+        contract.getOpenBids.call(game_id, function (err, hex) {
+            var bids = parseBids(hex);
+            resolve(bids);
+        });
+    });
+}
+            
 
 
 function spreadShow(id) {
-    getGames().then(function (games) {
-        var game = games.filter(g => g.id == id)[0];
-        var category = dictionary.categories[game.category];
-        $('.matchup').html(`${category} - ${game.home} vs ${game.away}`)
+    $("#home-bids-table tbody, #away-bids-table tbody, #bets-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
+
+    getGame(id).then(function (game) {
+        $('.home').html(game.home);
+        $('.away').html(game.away);
     });
-    contract.BetPlaced({ game_id: id }, { fromBlock: 1 })
-        .get(function (err, logs) {
-            logs.forEach(log => addBetFromLog(log.args));
+    getBets(id).then(function (bets) {
+        bets.forEach(addBetFromLog);
+    });
+    getOpenBids(id).then(function (bids) {
+        bids.reverse().forEach(bid => {
+            if (bid.home) addBidToTable("#home-bids-table", bid);
+            else addBidToTable("#away-bids-table", bid);
         });
-    var hex = contract.getOpenBids(id);
-    var bids = parseBids(hex);
-    bids.forEach(bid => {
-        if (bid.home) addBidToTable("#home-bids-table", bid);
-        else addBidToTable("#away-bids-table", bid);
+    });
+    $.when(getGame(id), getOpenBids(id), getWalletAddress()).then(
+    function (game, bids, walletAddress) {
+        bids.filter(bid => bid.bidder == walletAddress).forEach(bid => {
+            bid.team = bid.home ? game.home : game.away;
+            addBidToTable("#my-bids-table", bid);
+        });
+    });
+    $.when(getGame(id), getWalletAddress()).then(function (game, walletAddress) {
+        getPlayerBets(walletAddress, game.id).then(function (bets) {
+            // TODO
+        });
     });
 }
 
 function addBidToTable (table, bid) {
-    var row = `<tr class="bid">
-        <td>${bid.bidder}</td>
+    var row = `<tr class="bid">`;
+    if (table == "#my-bids-table") {
+        row += `<td>${bid.team}</td>`;
+    }
+    row += `<td>${bid.line}</td>
         <td>${bid.amount}</td>
-        <td>${bid.line}</td>
     </tr>`;
-    $(table).append(row);
+    $(table + " tbody").append(row);
 }
 
 function parseBid(hex) {
@@ -136,5 +205,5 @@ function addBetFromLog(bet) {
         <td>${bet.line}</td>
         <td>${bet.amount}</td>
     </tr>`
-    $("#bets-table").append(row);
+    $("#bets-table tbody").append(row);
 }

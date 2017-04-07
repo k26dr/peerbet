@@ -24,20 +24,25 @@ function routeFromURL() {
 window.addEventListener("hashchange", routeFromURL);
 
 function route(page, params) {
-    $('.page').hide();
+    var html = "";
+    
+    // Emptying the view container is the most reliable way of deleting 
+    // old event listeners. Each page load re-assigns event handlers
+    ('#view-container').empty().hide();
     switch (page) {
         case 'spread':
+            $("#view-container").html($("#spread").html());
             spreadShow(params[0]);
-            $("#spread").show();
             break;
         case 'games':
-            $("#games").show();
+            $("#view-container").html($("#games").html());
             gamesList();
             break;
         default:
+            $("#view-container").html($("#games").html());
             gamesList();
-            $("#games").show();
     }
+    $('#view-container').show();
 }
 
 function getWalletAddress () {
@@ -200,32 +205,41 @@ function spreadShow(id) {
 
 
     // listeners for bet placement
-    if (!spreadShow.prototype.listeners) {
-        getWalletAddress().then(function (walletAddress) {
-            spreadShow.prototype.listeners = true;
-            $("#place-bet-home").click(function () {
-                var id = window.location.hash.split('_')[1];
-                var line = parseFloat($("#home-line").val());
-                var amount = parseFloat($("#home-amount").val());
-                var gas = contract.bidSpread.estimateGas(id, true, line, 
-                    { from: walletAddress, value: amount , gas: 1000000 });
-                contract.bidSpread.sendTransaction(id, true, line, 
-                    { from: walletAddress, value: amount , gas: 1000000 });
-            });
-            $("#place-bet-away").click(function () {
-                var id = window.location.hash.split('_')[1];
-                var line = parseFloat($("#away-line").val());
-                var amount = parseFloat($("#away-amount").val());
-                contract.bidSpread.sendTransaction(id, false, line, 
-                { from: walletAddress, value: amount , gas: 500000 });
-            });
+    getWalletAddress().then(function (walletAddress) {
+        $("#place-bet-home").click(function () {
+            var id = window.location.hash.split('_')[1];
+            var line = parseFloat($("#home-line").val());
+            var amount = parseFloat($("#home-amount").val());
+            var gas = contract.bidSpread.estimateGas(id, true, line, 
+                { from: walletAddress, value: amount , gas: 1000000 });
+            contract.bidSpread.sendTransaction(id, true, line, 
+                { from: walletAddress, value: amount , gas: 1000000 });
         });
-    }
+        $("#place-bet-away").click(function () {
+            var id = window.location.hash.split('_')[1];
+            var line = parseFloat($("#away-line").val());
+            var amount = parseFloat($("#away-amount").val());
+            contract.bidSpread.sendTransaction(id, false, line, 
+            { from: walletAddress, value: amount , gas: 500000 });
+        });
+    });
+
+    // Update description when bet changes
+    $(".form-control").on('keyup', function (e) {
+        var $parent = $(e.target).parents(".col-md-6")
+        var $description = $parent.find(".bet-description");  
+        var line = $parent.find(".line").val();
+        if (parseInt(line) > 0)
+            line = "+" + line;
+        var amount = $parent.find(".amount").val();
+        var team = $parent.find("#place-bet-home").length == 1 ? 
+            $parent.find(".home").html() : $parent.find(".away").html();
+        $description.html(`Bet ${amount} ETH @ ${team} (${line})`);
+    });
 
     // contract event listeners
     contract.BetPlaced({ game_id: id }).watch(function (err, log) {
         var bet = log.args;
-        console.log(bet);
         addBetToTable("#bets-table", bet);
         $.when(getGame(id), getWalletAddress())
         .then(function (game, walletAddress) {
@@ -238,7 +252,6 @@ function spreadShow(id) {
 
 }
 
-// TODO: Add USD amounts next to ETH
 function addBidToTable (table, bid) {
     var row = `<tr class="bid">`;
     if (table == "#my-bids-table") {
@@ -250,7 +263,6 @@ function addBidToTable (table, bid) {
     $(table + " tbody").prepend(row);
 }
 
-// TODO: Add USD amounts next to ETH
 function addBetToTable(table, bet) {
     var row = `<tr class="bet">`;
     if (table == "#my-bets-table") {

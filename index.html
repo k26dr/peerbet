@@ -8,6 +8,24 @@
 
 <body class="container">
 
+    <!-- Pages will be inserted here -->
+    <div id="view-container"></div>
+
+    <script src="https://code.jquery.com/jquery-3.1.1.js"
+        integrity="sha256-16cdPddA6VdVInumRGo6IbivbERE8p7CQR3HzTBuELA="
+        crossorigin="anonymous"></script>
+
+    <!-- Bootstrap -->
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+
+    <script src="main.js"></script>
+</body>
+
+</html>
+
+
+<!-- Page HTML templates below -->
+
 <section class="page" id="games">
     <h1>Games</h1>
     <table id="games-table" class="table table-striped table-bordered">
@@ -35,14 +53,19 @@
             <h3>Bet <span class="home">Home</span></h3>
             <div class="form-group">
                 <label>Line</label>
-                <input id="home-line" type="number" step="0.5" class="form-control">
+                <input id="home-line" type="number" step="0.5"
+                    class="form-control line">
             </div>
             <div class="form-group">
                 <label>Amount (ETH)</label>
-                <input id="home-amount" type="number" step="1" class="form-control">
+                <input id="home-amount" type="number" step="1"
+                    class="form-control amount">
             </div>
             <div class="form-group">
-                <button class="btn btn-primary" id="place-bet-home">
+                <label class="bet-description"></label>
+            </div>
+            <div class="form-group">
+                <button class="btn btn-primary place-bet" id="place-bet-home">
                     Place Bet
                 </button>
             </div>
@@ -52,14 +75,19 @@
             <h3>Bet <span class="away">Away</span></h3>
             <div class="form-group">
                 <label>Line</label>
-                <input id="away-line" type="number" step="0.5" class="form-control">
+                <input id="away-line" type="number" step="0.5" 
+                    class="form-control line">
             </div>
             <div class="form-group">
                 <label>Amount (ETH)</label>
-                <input id="away-amount" type="number" step="1" class="form-control">
+                <input id="away-amount" type="number" step="1" 
+                    class="form-control amount">
             </div>
             <div class="form-group">
-                <button class="btn btn-primary" id="place-bet-away">
+                <label class="bet-description"></label>
+            </div>
+            <div class="form-group">
+                <button class="btn btn-primary place-bet" id="place-bet-away">
                     Place Bet
                 </button>
             </div>
@@ -136,14 +164,3 @@
     </div>
 </section>
 
-<script src="https://code.jquery.com/jquery-3.1.1.js"
-    integrity="sha256-16cdPddA6VdVInumRGo6IbivbERE8p7CQR3HzTBuELA="
-    crossorigin="anonymous"></script>
-
-<!-- Bootstrap -->
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
-
-<script src="main.js"></script>
-</body>
-
-</html>

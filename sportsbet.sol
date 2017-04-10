@@ -98,6 +98,7 @@ contract SportsBet {
     }
         
 
+    // This will eventually be expanded to include MoneyLine and OverUnder bets
     function bidSpread(bytes32 game_id, bool home, int32 line) payable returns (int) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
@@ -116,7 +117,7 @@ contract SportsBet {
         // Use leftover funds to place open bids (maker)
         if (bid.amount > 0) {
             Bid[] bidStack = home ? book.homeBids : book.awayBids;
-            int result = addBidToStack(remainingBid, bidStack);
+            addBidToStack(remainingBid, bidStack);
             BidPlaced(game_id, BookType.Spread, remainingBid.bidder, remainingBid.amount, home, line);
         }
 
@@ -124,8 +125,11 @@ contract SportsBet {
     }
 
     // returning an array of structs is not allowed, so its time for a hackjob
-    // this returns a raw bytes dump of the combined home and away bids
+    // that returns a raw bytes dump of the combined home and away bids
     // clients will have to parse the hex dump to get the bids out
+    // This function is for DEBUGGING PURPOSES ONLY. Using it in a production
+    // setting will return very large byte arrays that will consume your bandwidth
+    // if you are using Metamask or not running a full node  
     function getOpenBids(bytes32 game_id) constant returns (bytes) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
@@ -155,7 +159,7 @@ contract SportsBet {
 
     // Unfortunately this function had too many local variables, so a 
     // bunch of unruly code had to be used to eliminate some variables
-    function getOpenBidsByLine(bytes32 game_id) constant returns (int32) {
+    function getOpenBidsByLine(bytes32 game_id) constant returns (bytes) {
         Book book = getBook(game_id, BookType.Spread);
 
         uint away_lines_length = getUniqueLineCount(book.awayBids);
@@ -183,26 +187,27 @@ contract SportsBet {
             if (bid.amount == 0) // ignore deleted bids
                 continue;
             if (line_amounts[1][bid.line] == 0) {
-                home_lines[k] = bid.line;
+                away_lines[k] = bid.line;
                 k++;
             }
             line_amounts[1][bid.line] += bid.amount;
         }
 
-        // return hacky byte array with lines and amounts
-        bytes memory s = new bytes(37 * (home_lines.length + away_lines.length));
+        bytes memory s = new bytes(37 * (home_lines_length + away_lines_length));
         k = 0;
-        for (i=0; i < (home_lines.length + away_lines.length); i++) {
-            bool home = i < home_lines.length;
-            int32 line = home ? home_lines[i] : away_lines[i - home_lines.length];
-            uint amount = home ? line_amounts[0][line] : line_amounts[1][line];
-
-            bytes32 b1 = bytes32(amount);
-            bytes4 b3 = bytes4(line);
-
-            for (j=0; j < 32; j++) { s[k] = b1[j]; k++; }
-            s[k] = home ? byte(1) : byte(0); k++;
-            for (j=0; j < 4; j++) { s[k] = b3[j]; k++; }
+        for (i=0; i < home_lines_length; i++) {
+            bytes4 line = bytes4(home_lines[i]);
+            bytes32 amount = bytes32(line_amounts[0][home_lines[i]]);
+            for (uint j=0; j < 32; j++) { s[k] = amount[j]; k++; }
+            s[k] = byte(1); k++;
+            for (j=0; j < 4; j++) { s[k] = line[j]; k++; }
+        }
+        for (i=0; i < away_lines_length; i++) {
+            line = bytes4(away_lines[i]);
+            amount = bytes32(line_amounts[1][away_lines[i]]);
+            for (j=0; j < 32; j++) { s[k] = amount[j]; k++; }
+            s[k] = byte(0); k++;
+            for (j=0; j < 4; j++) { s[k] = line[j]; k++; }
         }
         
         return s;
@@ -210,13 +215,15 @@ contract SportsBet {
 
     function getUniqueLineCount(Bid[] stack) private constant returns (uint) {
         uint line_count = 0;
+        int lastIndex = -1;
         for (uint i=0; i < stack.length; i++) {
             if (stack[i].amount == 0) // ignore deleted bids
                 continue;
-            if (i == 0)
+            if (lastIndex == -1)
                 line_count++;
-            else if (stack[i].line != stack[i-1].line)
+            else if (stack[i].line != stack[uint(lastIndex)].line)
                 line_count++;
+            lastIndex = int(i);
         }
         return line_count;
     }
@@ -352,6 +359,8 @@ contract SportsBet {
         uint lastIndex = stack.length - 1;
         while (true) {
             if (stack[i].amount == 0) { // ignore deleted bids
+                if (i == 0)
+                    break;
                 i--;
                 continue;
             }

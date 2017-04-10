@@ -32,7 +32,7 @@ games.forEach(function (game) {
 
 var active_games = games.map(g => contract.getGameId.call(...g));
 
-for (var i=0; i < 100; i++) {
+for (var i=0; i < 200; i++) {
     var random_index = Math.floor(Math.random() * active_games.length);
     var random_amount = Math.floor(Math.random() * 100000);
     var random_line = Math.floor(Math.random() * 20) - 10;

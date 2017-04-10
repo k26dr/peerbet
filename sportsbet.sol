@@ -124,6 +124,8 @@ contract SportsBet {
     }
 
     // returning an array of structs is not allowed, so its time for a hackjob
+    // this returns a raw bytes dump of the combined home and away bids
+    // clients will have to parse the hex dump to get the bids out
     function getOpenBids(bytes32 game_id) constant returns (bytes) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
@@ -149,6 +151,112 @@ contract SportsBet {
         }
 
         return s;
+    }
+
+    // Unfortunately this function had too many local variables, so a 
+    // bunch of unruly code had to be used to eliminate some variables
+    function getOpenBidsByLine(bytes32 game_id) constant returns (int32) {
+        Book book = getBook(game_id, BookType.Spread);
+
+        uint away_lines_length = getUniqueLineCount(book.awayBids);
+        uint home_lines_length = getUniqueLineCount(book.homeBids);
+
+        // group bid amounts by line
+        mapping(int32 => uint)[2] line_amounts;
+        int32[] memory away_lines = new int32[](away_lines_length);
+        int32[] memory home_lines = new int32[](home_lines_length);
+
+        uint k = 0;
+        for (uint i=0; i < book.homeBids.length; i++) {
+            Bid bid = book.homeBids[i]; 
+            if (bid.amount == 0) // ignore deleted bids
+                continue;
+            if (line_amounts[0][bid.line] == 0) {
+                home_lines[k] = bid.line;
+                k++;
+            }
+            line_amounts[0][bid.line] += bid.amount;
+        }
+        k = 0;
+        for (i=0; i < book.awayBids.length; i++) {
+            bid = book.awayBids[i]; 
+            if (bid.amount == 0) // ignore deleted bids
+                continue;
+            if (line_amounts[1][bid.line] == 0) {
+                home_lines[k] = bid.line;
+                k++;
+            }
+            line_amounts[1][bid.line] += bid.amount;
+        }
+
+        // return hacky byte array with lines and amounts
+        bytes memory s = new bytes(37 * (home_lines.length + away_lines.length));
+        k = 0;
+        for (i=0; i < (home_lines.length + away_lines.length); i++) {
+            bool home = i < home_lines.length;
+            int32 line = home ? home_lines[i] : away_lines[i - home_lines.length];
+            uint amount = home ? line_amounts[0][line] : line_amounts[1][line];
+
+            bytes32 b1 = bytes32(amount);
+            bytes4 b3 = bytes4(line);
+
+            for (j=0; j < 32; j++) { s[k] = b1[j]; k++; }
+            s[k] = home ? byte(1) : byte(0); k++;
+            for (j=0; j < 4; j++) { s[k] = b3[j]; k++; }
+        }
+        
+        return s;
+    }
+
+    function getUniqueLineCount(Bid[] stack) private constant returns (uint) {
+        uint line_count = 0;
+        for (uint i=0; i < stack.length; i++) {
+            if (stack[i].amount == 0) // ignore deleted bids
+                continue;
+            if (i == 0)
+                line_count++;
+            else if (stack[i].line != stack[i-1].line)
+                line_count++;
+        }
+        return line_count;
+    }
+
+    function getOpenBidsByBidder(bytes32 game_id, address bidder) constant returns (bytes) {
+        Game game = getGameById(game_id);
+        Book book = game.books[uint(BookType.Spread)];
+        uint nBids = book.homeBids.length + book.awayBids.length;
+        uint myBids = 0;
+
+        // count number of bids by bidder
+        for (uint i=0; i < nBids; i++) {
+            Bid bid = i < book.homeBids.length ? book.homeBids[i] : book.awayBids[i - book.homeBids.length];
+            if (bid.bidder == bidder)
+                myBids += 1;
+        }
+
+        bytes memory s = new bytes(37 * myBids);
+        uint k = 0;
+        for (i=0; i < nBids; i++) {
+            bid = i < book.homeBids.length ? book.homeBids[i] : book.awayBids[i - book.homeBids.length];
+            if (bid.bidder != bidder) // ignore other people's bids
+                continue; 
+            bytes32 amount = bytes32(bid.amount);
+            byte home = bid.home ? byte(1) : byte(0);
+            bytes4 line = bytes4(bid.line);
+
+            for (uint j=0; j < 32; j++) { s[k] = amount[j]; k++; }
+            s[k] = home; k++;
+            for (j=0; j < 4; j++) { s[k] = line[j]; k++; }
+        }
+        return s;
+    }
+        
+
+    // for functions throwing a stack too deep error, this helper will free up 2 local variable spots
+    function getBook(bytes32 game_id, BookType book_type) constant private returns (Book storage) {
+        Game game = getGameById(game_id);
+        Book book = game.books[uint(book_type)];
+        return book;
     }
     
     function matchExistingBids(Bid bid, Book storage book, bool home, bytes32 game_id) private returns (Bid) {
@@ -189,24 +297,17 @@ contract SportsBet {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
         Bid[] stack = home ? book.homeBids : book.awayBids;
-        bool found = true;
-        uint i = 0;
 
         // Delete bid in stack, refund amount to user
-        while (i < stack.length) {
+        bool found = false;
+        for (uint i=0; i < stack.length; i++) {
             if (stack[i].bidder == bidder && stack[i].line == line) {
                 balances[bidder] += stack[i].amount;
                 delete stack[i];
                 found = true;
-                break;
             }
-            i++;
         }
-
-        if (!found)
-            return false;
-
-        return true;
+        return found;
     }
 
     function kill () {

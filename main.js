@@ -28,7 +28,7 @@ function route(page, params) {
     
     // Emptying the view container is the most reliable way of deleting 
     // old event listeners. Each page load re-assigns event handlers
-    ('#view-container').empty().hide();
+    $('#view-container').empty().hide();
     switch (page) {
         case 'spread':
             $("#view-container").html($("#spread").html());
@@ -207,6 +207,8 @@ function spreadShow(id) {
     // listeners for bet placement
     getWalletAddress().then(function (walletAddress) {
         $("#place-bet-home").click(function () {
+            if ($("#home-amount").val().trim() == '' || $("#home-line").val().trim() == '')
+                return false;
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#home-line").val());
             var amount = parseFloat($("#home-amount").val());
@@ -214,13 +216,28 @@ function spreadShow(id) {
                 { from: walletAddress, value: amount , gas: 1000000 });
             contract.bidSpread.sendTransaction(id, true, line, 
                 { from: walletAddress, value: amount , gas: 1000000 });
+            $("#home-amount").val('');
+            var team = $('.home').first().html();
+            if (line > 0)
+                line = '+' + line;
+            var notice = `Bet placed. Allow 2 min for bet to process`;
+            $("#bet-description-home").html(notice);
         });
         $("#place-bet-away").click(function () {
+            if ($("#away-amount").val().trim() == '' || 
+                $("#away-line").val().trim() == '')
+                return false;
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#away-line").val());
             var amount = parseFloat($("#away-amount").val());
             contract.bidSpread.sendTransaction(id, false, line, 
             { from: walletAddress, value: amount , gas: 500000 });
+            $("#away-amount").val('');
+            var team = $('.away').first().html();
+            if (line > 0)
+                line = '+' + line;
+            var notice = `Bet placed. Allow 2 min for bet to process`;
+            $("#bet-description-away").html(notice);
         });
     });
 
@@ -258,8 +275,11 @@ function addBidToTable (table, bid) {
         row += `<td>${bid.team}</td>`;
     }
     row += `<td>${bid.line}</td>
-        <td>${bid.amount}</td>
-    </tr>`;
+        <td>${bid.amount}</td>`;
+    if (table == "#my-bids-table") {
+        row += `<td><a class="cancel-bid">Cancel</a></td>`;
+    }
+    row += `</tr>`;
     $(table + " tbody").prepend(row);
 }
 

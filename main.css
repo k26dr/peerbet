@@ -1,3 +1,6 @@
 .page {
     display:none;
 }
+.cancel-bid {
+    cursor: pointer;
+}

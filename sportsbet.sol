@@ -404,4 +404,8 @@ contract SportsBet {
         return true;
     }
 
+    function getBalance(address account) constant returns (uint) {
+        return balances[account];
+    }        
+
 }

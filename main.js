@@ -72,8 +72,12 @@ function getGames () {
             contract.GameCreated({}, { fromBlock: 1 })
                 .get(function (err, logs) {
                     // cache then resolve
-                    getGames.prototype.games = logs.map(log => log.args);
-                    resolve(getGames.prototype.games);
+                    var games = logs.map(log => log.args);
+                    games.sort(function (a,b) {
+                        return a.locktime - b.locktime;
+                    });
+                    getGames.prototype.games = games;
+                    resolve(games);
                 });
         }
     });
@@ -159,13 +163,56 @@ function getOpenBids(game_id) {
         });
     });
 }
+
+function getOpenBidsByLine(game_id) {
+    return new Promise(function (resolve, reject) {
+        // use cache if less than 5 seconds old and is the right game
+        if (getOpenBidsByLine.prototype.lastUpdate &&
+            getOpenBidsByLine.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
+            getOpenBidsByLine.prototype.game_id == game_id)
+            resolve(getOpenBidsByLine.prototype.bids);
+        contract.getOpenBidsByLine.call(game_id, function (err, hex) {
+            var bids = parseBids(hex);
+            getOpenBidsByLine.prototype.bids = bids;
+            getOpenBidsByLine.prototype.lastUpdate = new Date();
+            getOpenBidsByLine.prototype.game_id = game_id;
+            resolve(bids);
+        });
+    });
+}
+
+function getMyOpenBids(game_id, walletAddress) {
+    return new Promise(function (resolve, reject) {
+        // use cache if less than 5 seconds old and is the right game
+        if (getMyOpenBids.prototype.lastUpdate &&
+            getMyOpenBids.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
+            getMyOpenBids.prototype.game_id == game_id)
+            resolve(getMyOpenBids.prototype.bids);
+        getWalletAddress().then(function (walletAddress) {
+            contract.getOpenBidsByBidder.call(game_id, walletAddress, function (err, hex) {
+                var bids = parseBids(hex);
+                getMyOpenBids.prototype.bids = bids;
+                getMyOpenBids.prototype.lastUpdate = new Date();
+                getMyOpenBids.prototype.game_id = game_id;
+                resolve(bids);
+            });
+        });
+    });
+}
             
 function updateBids (game_id) {
-    getOpenBids(game_id).then(function (bids) {
+    getOpenBidsByLine(game_id).then(function (bids) {
         $("#home-bids-table tbody, #away-bids-table tbody").empty();
         bids.forEach(bid => {
             if (bid.home) addBidToTable("#home-bids-table", bid);
             else addBidToTable("#away-bids-table", bid);
+        });
+    });
+    $.when(getGame(game_id), getMyOpenBids(game_id)).then(function (game, bids) {
+        $("#my-bids-table tbody").empty();
+        bids.forEach(bid => {
+            bid.team = bid.home ? game.home : game.away;
+            addBidToTable("#my-bids-table", bid);
         });
     });
 }
@@ -177,6 +224,23 @@ function spreadShow(id) {
     getGame(id).then(function (game) {
         $('.home').html(game.home);
         $('.away').html(game.away);
+
+        // Display gametime 
+        var locktime = new Date(game.locktime * 1000);
+        var timeString = locktime.toLocaleTimeString();
+        var dateString = locktime.toLocaleDateString();
+        var timeString = locktime.toLocaleTimeString('en-us',
+            { timeZoneName: 'short' });
+        $('.locktime').html(`${dateString} ${timeString}`);
+
+        // Hide betting 10 min prior to gametime
+        var now = new Date();
+        var tenMinutes = 10*60*1000;
+        console.log(locktime - now);
+        if (locktime - now < tenMinutes) {
+            $("#bet-placements, #open-bids-row").hide();
+            $(".game-status").html("Betting is closed");
+        }
     });
     getBets(id).then(function (bets) {
         bets.forEach(bet => addBetToTable("#bets-table", bet));
@@ -186,13 +250,6 @@ function spreadShow(id) {
     });
     updateBids(id);
     setInterval(() => updateBids(id), 5000);
-    $.when(getGame(id), getOpenBids(id), getWalletAddress()).then(
-    function (game, bids, walletAddress) {
-        bids.filter(bid => bid.bidder == walletAddress).forEach(bid => {
-            bid.team = bid.home ? game.home : game.away;
-            addBidToTable("#my-bids-table", bid);
-        });
-    });
     $.when(getGame(id), getBets(id), getWalletAddress()).then(
     function (game, bets, walletAddress) {
         var myBets = bets.filter(bet =>
@@ -241,6 +298,20 @@ function spreadShow(id) {
         });
     });
 
+    // cancel bid listener
+    $(document).on("click", ".cancel-bid", function (e) {
+        var game_id = window.location.hash.split('_')[1];
+        $.when(getWalletAddress(), getGame(game_id))
+        .then(function (walletAddress, game) {
+            var $parentRow = $(e.target).parents("tr");
+            var team = $parentRow.find("td").first().html();
+            var home = team == game.home;
+            var line = $parentRow.find("td").eq(1).html();
+            contract.cancelBid.sendTransaction(walletAddress, game_id, 
+                line, home, { from: walletAddress, gas: 200000 });
+        });
+    });
+
     // Update description when bet changes
     $(".form-control").on('keyup', function (e) {
         var $parent = $(e.target).parents(".col-md-6")
@@ -270,6 +341,7 @@ function spreadShow(id) {
 }
 
 function addBidToTable (table, bid) {
+    var side = bid.home ? "home" : "away";
     var row = `<tr class="bid">`;
     if (table == "#my-bids-table") {
         row += `<td>${bid.team}</td>`;
@@ -303,12 +375,27 @@ function parseBid(hex) {
     }
 }
 
+function parseShortBid(hex) {
+    return {
+        amount: parseInt(hex.slice(0,64), 16),
+        home: parseInt(hex.slice(64,66)) == 1,
+        line: ~~parseInt(hex.slice(66), 16)
+    }
+}
+
 function parseBids(hex) {
-    var bids = []
     if (hex.slice(0,2) == '0x')
         hex = hex.slice(2);
-    for (var i=0; i < hex. length; i += 114)
-        bids.push(parseBid(hex.substring(i, i+114)));
+    var short = (hex.length % 74 == 0);
+    var bids = []
+    if (short) {
+        for (var i=0; i < hex.length; i += 74) 
+            bids.push(parseShortBid(hex.slice(i, i+74)));
+    }
+    else {
+        for (var i=0; i < hex.length; i += 114)
+            bids.push(parseBid(hex.slice(i, i+114)));
+    }
 
     return bids.filter(bid => bid.amount > 0);
 }

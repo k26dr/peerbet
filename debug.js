@@ -39,7 +39,6 @@ function parseShortBid(hex) {
     }
 }
 
-// bool bidder: true if 20-byte bidder is present in bid
 function parseBids(hex) {
     if (hex.slice(0,2) == '0x')
         hex = hex.slice(2);

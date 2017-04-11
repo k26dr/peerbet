@@ -47,8 +47,13 @@
     <h1>
         <span class="home">Home</span> vs <span class="away">Away</span>
     </h1>
+
+    <div>
+        Gametime: <span class="locktime"></span> - 
+        <span class="game-status">Betting locks 10 min prior to gametime</span>
+    </div>
     
-    <div class="row">
+    <div class="row" id="bet-placements">
         <div class="col-md-6">
             <h3>Bet <span class="home">Home</span></h3>
             <div class="form-group">
@@ -94,46 +99,52 @@
         </div>
     </div>
 
-    <div class="row">
+    <div class="row" id="open-bids-row">
         <div class="col-md-6">
             <h3>Open <span class="home">Home</span> Bids</h3>
-            <table id="home-bids-table" class="table table-striped table-bordered">
-                <thead>
-                    <tr>
-                        <th>Line</th>
-                        <th>Amount</th>
-                    <tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            <div class="pane">
+                <table id="home-bids-table" class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Line</th>
+                            <th>Amount</th>
+                        <tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
 
         <div class="col-md-6">
             <h3>Open <span class="away">Away</span> Bids</h3>
-            <table id="away-bids-table" class="table table-striped table-bordered">
-                <thead>
-                    <tr>
-                        <th>Line</th>
-                        <th>Amount</th>
-                    <tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            <div class="pane">
+                <table id="away-bids-table" class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Line</th>
+                            <th>Amount</th>
+                        <tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
     <div class="row">
         <div class="col-md-6">
             <h3>Latest Bets</h3>
-            <table id="bets-table" class="table table-striped table-bordered">
-                <thead>
-                    <tr>
-                        <th>Line (<span class="home">Home</span>)</th>
-                        <th>Amount</th>
-                    <tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            <div class="pane">
+                <table id="bets-table" class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Line (<span class="home">Home</span>)</th>
+                            <th>Amount</th>
+                        <tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
 
         <div class="col-md-6">

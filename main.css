@@ -4,3 +4,10 @@
 .cancel-bid {
     cursor: pointer;
 }
+.bet-placements {
+    display: none;
+}
+.pane {
+    max-height: 400px;
+    overflow-y: scroll;
+}

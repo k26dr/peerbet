@@ -241,6 +241,10 @@ function spreadShow(id) {
             $("#bet-placements, #open-bids-row").hide();
             $(".game-status").html("Betting is closed");
         }
+        else {
+            $("#bet-placements, #open-bids-row").show();
+            $(".game-status").html("Betting locks 10 min prior to gametime");
+        }
     });
     getBets(id).then(function (bets) {
         bets.forEach(bet => addBetToTable("#bets-table", bet));
@@ -399,4 +403,3 @@ function parseBids(hex) {
 
     return bids.filter(bid => bid.amount > 0);
 }
-

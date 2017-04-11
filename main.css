@@ -1,3 +1,6 @@
+#view-container {
+    min-height: 85%;
+}
 .page {
     display:none;
 }
@@ -10,4 +13,8 @@
 .pane {
     max-height: 400px;
     overflow-y: scroll;
+}
+footer {
+    font-size: 10px;
+    margin: 20px;
 }

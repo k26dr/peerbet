@@ -6,6 +6,8 @@ var contractAddressPromise = $.get("contract_address");
 var dictionaryPromise = $.get("data_dictionary.json");
 var contract;
 var dictionary;
+var global_intervals = [];
+var global_filters = [];
 
 $.when(contractAddressPromise, abiPromise, dictionaryPromise, docReady).always(function (contractAddress, abiJSON, dictionary) {
     var contractAddress = contractAddress[0];
@@ -18,6 +20,8 @@ $.when(contractAddressPromise, abiPromise, dictionaryPromise, docReady).always(f
 });
 
 function routeFromURL() {
+    global_intervals.forEach(clearInterval);
+    global_filters.forEach(filter => filter.stopWatching());
     var parts = window.location.hash.slice(1).split('_');
     route(parts[0], parts.slice(1))
 }
@@ -236,7 +240,6 @@ function spreadShow(id) {
         // Hide betting 10 min prior to gametime
         var now = new Date();
         var tenMinutes = 10*60*1000;
-        console.log(locktime - now);
         if (locktime - now < tenMinutes) {
             $("#bet-placements, #open-bids-row").hide();
             $(".game-status").html("Betting is closed");
@@ -253,7 +256,9 @@ function spreadShow(id) {
         $("#away-line").val(-currentLine);
     });
     updateBids(id);
-    setInterval(() => updateBids(id), 5000);
+    var updateBidsInterval = setInterval(() => updateBids(id), 5000);
+    global_intervals.push(updateBidsInterval);
+
     $.when(getGame(id), getBets(id), getWalletAddress()).then(
     function (game, bets, walletAddress) {
         var myBets = bets.filter(bet =>
@@ -330,7 +335,8 @@ function spreadShow(id) {
     });
 
     // contract event listeners
-    contract.BetPlaced({ game_id: id }).watch(function (err, log) {
+    var betPlacedFilter = contract.BetPlaced({ game_id: id });
+    betPlacedFilter.watch(function (err, log) {
         var bet = log.args;
         addBetToTable("#bets-table", bet);
         $.when(getGame(id), getWalletAddress())
@@ -341,6 +347,7 @@ function spreadShow(id) {
             }
         });
     });
+    global_filters.push(betPlacedFilter);
 
 }
 

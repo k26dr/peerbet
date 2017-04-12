@@ -34,8 +34,8 @@ var active_games = games.map(g => contract.getGameId.call(...g));
 
 for (var i=0; i < 100; i++) {
     var random_index = Math.floor(Math.random() * (active_games.length - 1));
-    var random_amount = Math.floor(Math.random() * 100000);
-    var random_line = Math.floor(Math.random() * 20) - 10;
+    var random_amount = Math.random() * 1000 * 1e17;
+    var random_line = (Math.floor(Math.random() * 40) - 20) * 5; // -100 to 100 by 5s
     var home = Math.random() > 0.5;
     contract.bidSpread.sendTransaction(active_games[random_index], home, random_line, { from: walletAddress, value: random_amount , gas: 500000 });
 }

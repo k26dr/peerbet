@@ -251,7 +251,7 @@ function spreadShow(id) {
     });
     getBets(id).then(function (bets) {
         bets.forEach(bet => addBetToTable("#bets-table", bet));
-        var currentLine = bets[bets.length - 1].line;
+        var currentLine = bets[bets.length - 1].line / 10;
         $("#home-line").val(currentLine);
         $("#away-line").val(-currentLine);
     });
@@ -276,8 +276,8 @@ function spreadShow(id) {
             if ($("#home-amount").val().trim() == '' || $("#home-line").val().trim() == '')
                 return false;
             var id = window.location.hash.split('_')[1];
-            var line = parseFloat($("#home-line").val());
-            var amount = parseFloat($("#home-amount").val());
+            var line = parseFloat($("#home-line").val()) * 10;
+            var amount = parseFloat($("#home-amount").val()) * 1e18;
             var gas = contract.bidSpread.estimateGas(id, true, line, 
                 { from: walletAddress, value: amount , gas: 1000000 });
             contract.bidSpread.sendTransaction(id, true, line, 
@@ -286,7 +286,7 @@ function spreadShow(id) {
             var team = $('.home').first().html();
             if (line > 0)
                 line = '+' + line;
-            var notice = `Bet placed. Allow 2 min for bet to process`;
+            var notice = `Bet placed. Allow 30 sec for bet to process`;
             $("#bet-description-home").html(notice);
         });
         $("#place-bet-away").click(function () {
@@ -294,15 +294,15 @@ function spreadShow(id) {
                 $("#away-line").val().trim() == '')
                 return false;
             var id = window.location.hash.split('_')[1];
-            var line = parseFloat($("#away-line").val());
-            var amount = parseFloat($("#away-amount").val());
+            var line = parseFloat($("#away-line").val()) * 10;
+            var amount = parseFloat($("#away-amount").val()) * 1e18;
             contract.bidSpread.sendTransaction(id, false, line, 
             { from: walletAddress, value: amount , gas: 500000 });
             $("#away-amount").val('');
             var team = $('.away').first().html();
             if (line > 0)
                 line = '+' + line;
-            var notice = `Bet placed. Allow 2 min for bet to process`;
+            var notice = `Bet placed. Allow 30 sec for bet to process`;
             $("#bet-description-away").html(notice);
         });
     });
@@ -353,12 +353,15 @@ function spreadShow(id) {
 
 function addBidToTable (table, bid) {
     var side = bid.home ? "home" : "away";
+    var amount = bid.amount / 1e18;
+    var line = bid.line / 10;
+
     var row = `<tr class="bid">`;
     if (table == "#my-bids-table") {
         row += `<td>${bid.team}</td>`;
     }
-    row += `<td>${bid.line}</td>
-        <td>${bid.amount}</td>`;
+    row += `<td>${line}</td>
+        <td class="currency">${amount}</td>`;
     if (table == "#my-bids-table") {
         row += `<td><a class="cancel-bid">Cancel</a></td>`;
     }
@@ -368,11 +371,14 @@ function addBidToTable (table, bid) {
 
 function addBetToTable(table, bet) {
     var row = `<tr class="bet">`;
+    var amount = bet.amount / 1e18;
+    var line = bet.line / 10;
+
     if (table == "#my-bets-table") {
         row += `<td>${bet.team}</td>`;
     }
-    row += `<td>${bet.line}</td>
-        <td>${bet.amount}</td>
+    row += `<td>${line}</td>
+        <td class="currency">${amount}</td>
     </tr>`;
     $(table + " tbody").prepend(row);
 }

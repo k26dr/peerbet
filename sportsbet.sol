@@ -99,18 +99,21 @@ contract SportsBet {
         
 
     // This will eventually be expanded to include MoneyLine and OverUnder bets
+    // line is actually 10x the line to allow for half-point spreads
     function bidSpread(bytes32 game_id, bool home, int32 line) payable returns (int) {
         Game game = getGameById(game_id);
         Book book = game.books[uint(BookType.Spread)];
         Bid memory bid = Bid(msg.sender, msg.value, home, line);
 
-        // check game locktime
+        // validate inputs: game status, gametime, line amount
         if (game.status == GameStatus.Locked)
             return 1;
         if (now > game.locktime) {
             game.status = GameStatus.Locked;    
             return 2;
         }
+        if (line % 5 != 0)
+            return 3;
 
         Bid memory remainingBid = matchExistingBids(bid, book, home, game_id);
 

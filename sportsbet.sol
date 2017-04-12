@@ -10,8 +10,8 @@ contract SportsBet {
         string away, uint16 indexed category, uint64 locktime);
     event BidPlaced(bytes32 indexed game_id, BookType book, 
         address bidder, uint amount, bool home, int32 line);
-    event BetPlaced(bytes32 indexed game_id, BookType book, 
-        address home, address away, uint amount, int32 line);
+    event BetPlaced(bytes32 indexed game_id, BookType indexed book, 
+        address indexed user, bool home, uint amount, int32 line);
 
     struct Bid {
         address bidder;
@@ -297,7 +297,8 @@ contract SportsBet {
 
             Bet memory bet = Bet(homeAddress, awayAddress, betAmount, betLine, BetStatus.Open);
             book.bets.push(bet);
-            BetPlaced(game_id, BookType.Spread, homeAddress, awayAddress, betAmount, betLine);
+            BetPlaced(game_id, BookType.Spread, homeAddress, true, betAmount, betLine);
+            BetPlaced(game_id, BookType.Spread, awayAddress, false, betAmount, -betLine);
             i--;
         }
         return bid;

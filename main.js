@@ -150,6 +150,25 @@ function getBets(game_id) {
     });
 }
 
+function getMyBets(game_id) {
+    return new Promise(function (resolve, reject) {
+        // if cache is set and is for this game
+        if (getMyBets.prototype.game_id == game_id)
+            resolve(getMyBets.prototype.bets);
+        else {
+            getWalletAddress().then(function (walletAddress) {
+                contract.BetPlaced({ game_id: game_id, user: walletAddress }, { fromBlock: 1 })
+                    .get(function (err, logs) {
+                        var bets = logs.map(log => log.args);
+                        getMyBets.prototype.game_id = game_id;
+                        getMyBets.prototype.bets = bets;
+                        resolve(bets);
+                    });
+            });
+        }
+    });
+}
+
 
 function getOpenBids(game_id) {
     return new Promise(function (resolve, reject) {
@@ -250,7 +269,8 @@ function spreadShow(id) {
         }
     });
     getBets(id).then(function (bets) {
-        bets.forEach(bet => addBetToTable("#bets-table", bet));
+        bets.filter(bet => bet.home)
+            .forEach(bet => addBetToTable("#bets-table", bet));
         var currentLine = bets[bets.length - 1].line / 10;
         $("#home-line").val(currentLine);
         $("#away-line").val(-currentLine);
@@ -259,14 +279,20 @@ function spreadShow(id) {
     var updateBidsInterval = setInterval(() => updateBids(id), 5000);
     global_intervals.push(updateBidsInterval);
 
-    $.when(getGame(id), getBets(id), getWalletAddress()).then(
-    function (game, bets, walletAddress) {
-        var myBets = bets.filter(bet =>
-            bet.home == walletAddress || bet.away == walletAddress);
+    $.when(getGame(id), getMyBets(id)).then(function (game, myBets) {
+        var lines = { home: {}, away: {} };
         myBets.forEach(bet => {
-            bet.team = bet.home == walletAddress ? game.home : game.away;
-            addBetToTable("#my-bets-table", bet);
+            var side = bet.home ? 'home' : 'away';
+            if (lines[side][bet.line])
+                lines[side][bet.line] += bet.amount;
+            else
+                lines[side][bet.line] = bet.amount;
         });
+        console.log(lines);
+        Object.keys(lines.home).forEach(line => addBetToTable("#my-bets-table",
+            { team: game.home, line: line, amount: lines.home[line] }));
+        Object.keys(lines.away).forEach(line => addBetToTable("#my-bets-table",
+            { team: game.away, line: line, amount: lines.away[line] }));
     });
 
 
@@ -315,7 +341,7 @@ function spreadShow(id) {
             var $parentRow = $(e.target).parents("tr");
             var team = $parentRow.find("td").first().html();
             var home = team == game.home;
-            var line = $parentRow.find("td").eq(1).html();
+            var line = parseFloat($parentRow.find("td").eq(1).html()) * 10;
             contract.cancelBid.sendTransaction(walletAddress, game_id, 
                 line, home, { from: walletAddress, gas: 200000 });
         });

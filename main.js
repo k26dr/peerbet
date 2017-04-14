@@ -38,10 +38,12 @@ function route(page, params) {
             $("#view-container").html($("#spread").html());
             spreadShow(params[0]);
             break;
-        case 'games':
-            $("#view-container").html($("#games").html());
-            gamesList();
+        case 'admin':
+            $("#view-container").html($("#admin").html());
+            adminPage();
             break;
+        case 'withdraw':
+        case 'games':
         default:
             $("#view-container").html($("#games").html());
             gamesList();
@@ -73,16 +75,18 @@ function getGames () {
         if (getGames.prototype.games)
             resolve(getGames.prototype.games);
         else {
-            contract.GameCreated({}, { fromBlock: 1 })
-                .get(function (err, logs) {
-                    // cache then resolve
-                    var games = logs.map(log => log.args);
-                    games.sort(function (a,b) {
-                        return a.locktime - b.locktime;
+            contract.getActiveGames.call(function (err, game_ids) {
+                contract.GameCreated({ id: game_ids }, { fromBlock: 1 })
+                    .get(function (err, logs) {
+                        var games = logs.map(log => log.args);
+                        // cache then resolve
+                        games.sort(function (a,b) {
+                            return a.locktime - b.locktime;
+                        });
+                        getGames.prototype.games = games;
+                        resolve(games);
                     });
-                    getGames.prototype.games = games;
-                    resolve(games);
-                });
+            });
         }
     });
 }
@@ -97,12 +101,12 @@ function getGame(id) {
 function gamesList () {
     $("#games-table tbody").empty();
     getGames().then(function (games) {
-        games.forEach(game => addGameFromLog(game, dictionary.categories));
+        games.forEach(game => addGameToTable(game, dictionary.categories, "#games-table"));
     });
 }
 
     
-function addGameFromLog (game, categories) {
+function addGameToTable (game, categories, table) {
     var category = categories[parseInt(game.category)];
     var gametime = new Date(parseInt(game.locktime) * 1000);
     var date = gametime.toISOString().slice(0,10);
@@ -113,10 +117,18 @@ function addGameFromLog (game, categories) {
         <td>${game.away}</td>
         <td>${category}</td>
         <td>${date}</td>
-        <td>${time}</td>
-        <td><a href="#spread_${game.id}">Spread</a></td>
-    </tr>`
-    $("#games-table tbody").append(row);
+        <td>${time}</td>`;
+    if (table == '#admin-games-table' && (game.status > 0 || new Date() > gametime)) {
+        row += `<td>
+            <input type="number" class="score-home" value="${game.result.home}"> -
+            <input type="number" class="score-away" value="${game.result.away}">
+            <button class="score-game">Score</button>
+        </td>`;
+    }
+    else
+        row += `<td><a href="#spread_${game.id}">Spread</a></td>`;
+    row += `</tr>`;
+    $(`#view-container ${table} tbody`).append(row);
 }
 
 function getETHtoUSDConversion () {
@@ -271,7 +283,7 @@ function spreadShow(id) {
     getBets(id).then(function (bets) {
         bets.filter(bet => bet.home)
             .forEach(bet => addBetToTable("#bets-table", bet));
-        var currentLine = bets[bets.length - 1].line / 10;
+        var currentLine = bets.filter(bet => bet.home).reverse()[0].line / 10;
         $("#home-line").val(currentLine);
         $("#away-line").val(-currentLine);
     });
@@ -279,22 +291,9 @@ function spreadShow(id) {
     var updateBidsInterval = setInterval(() => updateBids(id), 5000);
     global_intervals.push(updateBidsInterval);
 
-    $.when(getGame(id), getMyBets(id)).then(function (game, myBets) {
-        var lines = { home: {}, away: {} };
-        myBets.forEach(bet => {
-            var side = bet.home ? 'home' : 'away';
-            if (lines[side][bet.line])
-                lines[side][bet.line] += bet.amount;
-            else
-                lines[side][bet.line] = bet.amount;
-        });
-        console.log(lines);
-        Object.keys(lines.home).forEach(line => addBetToTable("#my-bets-table",
-            { team: game.home, line: line, amount: lines.home[line] }));
-        Object.keys(lines.away).forEach(line => addBetToTable("#my-bets-table",
-            { team: game.away, line: line, amount: lines.away[line] }));
+    getMyBets(id).then(function (myBets) {
+        myBets.forEach(bet => updateMyBets(bet, id));
     });
-
 
     // listeners for bet placement
     getWalletAddress().then(function (walletAddress) {
@@ -364,17 +363,44 @@ function spreadShow(id) {
     var betPlacedFilter = contract.BetPlaced({ game_id: id });
     betPlacedFilter.watch(function (err, log) {
         var bet = log.args;
-        addBetToTable("#bets-table", bet);
-        $.when(getGame(id), getWalletAddress())
-        .then(function (game, walletAddress) {
-            if (walletAddress == bet.home || walletAddress == bet.away) {
-                bet.team = bet.home == walletAddress ? game.home : game.away;
-                addBetToTable("#my-bets-table", bet);
-            }
+        if (bet.home)
+            addBetToTable("#bets-table", bet);
+        getWalletAddress().then(function (walletAddress) {
+            if (bet.user == walletAddress)
+                updateMyBets(bet, id);
         });
     });
     global_filters.push(betPlacedFilter);
 
+}
+
+function updateMyBets (bet, game_id) {
+    getGame(game_id).then(function (game) {
+        if (!updateMyBets.prototype.lines || updateMyBets.prototype.game_id !=  game_id) {
+            updateMyBets.prototype.lines = { home: {}, away: {} };
+            updateMyBets.prototype.game_id = game_id;
+        }
+        var side = bet.home ? 'home' : 'away';
+        var line = parseInt(bet.line);
+        if (updateMyBets.prototype.lines[side][line])
+            updateMyBets.prototype.lines[side][line] += parseInt(bet.amount);
+        else
+            updateMyBets.prototype.lines[side][line] = parseInt(bet.amount);
+
+        $("#my-bets-table tbody").empty();
+        Object.keys(updateMyBets.prototype.lines.home)
+            .forEach(line => addBetToTable("#my-bets-table", { 
+                team: game.home, 
+                line: line, 
+                amount: updateMyBets.prototype.lines.home[line] 
+            }));
+        Object.keys(updateMyBets.prototype.lines.away)
+            .forEach(line => addBetToTable("#my-bets-table", { 
+                team: game.away, 
+                line: line, 
+                amount: updateMyBets.prototype.lines.away[line] 
+            }));
+    });
 }
 
 function addBidToTable (table, bid) {
@@ -441,4 +467,31 @@ function parseBids(hex) {
     }
 
     return bids.filter(bid => bid.amount > 0);
+}
+
+function adminPage () {
+    $("#admin-games-table tbody").empty();
+    getGames().then(function (games) {
+        var game_ids = games.map(game => game.id);
+        games.forEach(game => game.result = { home: '', away: '' });
+        //contract.GameScored({ game_id: game_ids }, { fromBlock: 1 })
+        //    .get(function (err, logs) {
+        //        console.log(logs);
+        //    });
+        games.forEach(game => 
+            addGameToTable(game, dictionary.categories, "#admin-games-table"));
+    });
+
+    $('#create-game-submit').on('click', function () {
+        getWalletAddress().then(function (walletAddress) {
+            var home = $("#create-game-home").val();
+            var away = $("#create-game-away").val();
+            var category = parseInt($("#create-game-category").val());
+            var locktime = new Date($("#create-game-locktime").val()).getTime() / 1000;
+            contract.createGame(home, away, category, locktime, 
+                { from: walletAddress, gas: 400000 });
+            $("#admin-status").html("Creating game. Transaction sent");
+            $(".create-game-input").val('');
+        });
+    });
 }

@@ -12,6 +12,7 @@ contract SportsBet {
         address bidder, uint amount, bool home, int32 line);
     event BetPlaced(bytes32 indexed game_id, BookType indexed book, 
         address indexed user, bool home, uint amount, int32 line);
+    event GameScored(bytes32 indexed game_id, int homeScore, int awayScore);
 
     struct Bid {
         address bidder;
@@ -79,6 +80,7 @@ contract SportsBet {
         game.result.home = homeScore;
         game.result.away = awayScore;
         game.status = GameStatus.Scored;
+        GameScored(game_id, homeScore, awayScore);
 
         // Currently only handles spread bets
         Bet[] bets = game.books[uint(BookType.Spread)].bets;
@@ -343,7 +345,7 @@ contract SportsBet {
         
     }
     
-    function getActiveGames () returns (bytes32[]) {
+    function getActiveGames () constant returns (bytes32[]) {
         bytes32[] memory game_ids = new bytes32[](games.length);
         for (uint i=0; i < games.length; i++) {
             game_ids[i] = (games[i].id);
@@ -351,7 +353,6 @@ contract SportsBet {
         return game_ids;
     }
         
-
     function addBidToStack(Bid bid, Bid[] storage stack) private returns (int) {
         stack.push(bid); // make stack one item larger
 

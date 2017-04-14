@@ -8,6 +8,7 @@ var abi = JSON.parse(fs.readFileSync("abi.json", "ascii"));
 var contractAddress = fs.readFileSync("contract_address", "ascii");
 var contract = web3.eth.contract(abi).at(contractAddress);
 var walletAddress = web3.eth.accounts[0];
+var secondAddress = web3.eth.accounts[1];
 web3.personal.unlockAccount(walletAddress, process.argv[2]);
 
 var tx = {

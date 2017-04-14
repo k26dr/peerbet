@@ -42,7 +42,10 @@ function route(page, params) {
             $("#view-container").html($("#admin").html());
             adminPage();
             break;
-        case 'withdraw':
+        case 'profile':
+            $("#view-container").html($("#profile").html());
+            profilePage();
+            break;
         case 'games':
         default:
             $("#view-container").html($("#games").html());
@@ -129,6 +132,7 @@ function addGameToTable (game, categories, table) {
         row += `<td><a href="#spread_${game.id}">Spread</a></td>`;
     row += `</tr>`;
     $(`#view-container ${table} tbody`).append(row);
+    $(`#view-container ${table} tr`).last().data('id', game.id);
 }
 
 function getETHtoUSDConversion () {
@@ -303,8 +307,6 @@ function spreadShow(id) {
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#home-line").val()) * 10;
             var amount = parseFloat($("#home-amount").val()) * 1e18;
-            var gas = contract.bidSpread.estimateGas(id, true, line, 
-                { from: walletAddress, value: amount , gas: 1000000 });
             contract.bidSpread.sendTransaction(id, true, line, 
                 { from: walletAddress, value: amount , gas: 1000000 });
             $("#home-amount").val('');
@@ -429,6 +431,10 @@ function addBetToTable(table, bet) {
     if (table == "#my-bets-table") {
         row += `<td>${bet.team}</td>`;
     }
+    else if (table == "#profile-bets-table") {
+        row += `<td>${bet.date}</td>
+            <td>${bet.team}</td>`;
+    }
     row += `<td>${line}</td>
         <td class="currency">${amount}</td>
     </tr>`;
@@ -472,26 +478,96 @@ function parseBids(hex) {
 function adminPage () {
     $("#admin-games-table tbody").empty();
     getGames().then(function (games) {
+        adminPage.prototype.games = games;
         var game_ids = games.map(game => game.id);
         games.forEach(game => game.result = { home: '', away: '' });
-        //contract.GameScored({ game_id: game_ids }, { fromBlock: 1 })
-        //    .get(function (err, logs) {
-        //        console.log(logs);
-        //    });
-        games.forEach(game => 
-            addGameToTable(game, dictionary.categories, "#admin-games-table"));
+        contract.GameScored({ game_id: game_ids }, { fromBlock: 1 })
+            .get(function (err, logs) {
+                var scores  = logs.map(log => log.args);
+                scores.forEach(function (score) {
+                    var game = games.filter(game => game.id == score.game_id)[0];
+                    game.result.home = score.homeScore;
+                    game.result.away = score.awayScore;
+                });
+                games.forEach(game => addGameToTable(game, 
+                    dictionary.categories, "#admin-games-table"));
+            });
     });
 
     $('#create-game-submit').on('click', function () {
         getWalletAddress().then(function (walletAddress) {
-            var home = $("#create-game-home").val();
-            var away = $("#create-game-away").val();
-            var category = parseInt($("#create-game-category").val());
-            var locktime = new Date($("#create-game-locktime").val()).getTime() / 1000;
+            var home = document.getElementById("create-game-home").value;
+            var away = document.getElementById("create-game-away").value;
+            var category = document.getElementById("create-game-category").valueAsNumber;
+            var offset = new Date().getTimezoneOffset() * 60 * 1000;
+            var locktime = parseInt((document.querySelector("#create-game-locktime").valueAsNumber + offset) / 1000);
             contract.createGame(home, away, category, locktime, 
                 { from: walletAddress, gas: 400000 });
             $("#admin-status").html("Creating game. Transaction sent");
             $(".create-game-input").val('');
         });
     });
+
+    $(document).on('click', '.score-game', function (e) {
+        getWalletAddress().then(function (walletAddress) {
+            var inputs = $(e.target).siblings('input');
+            var homeScore = inputs[0].valueAsNumber;
+            var awayScore = inputs[1].valueAsNumber;
+            var game_id = $(e.target).parents("tr").data('id');
+            contract.setGameResult(game_id, homeScore, awayScore, 
+                { from: walletAddress, gas: 1000000 });
+            $("#admin-status").html("Game scored. Transaction sent");
+        });
+    });
+}
+
+function profilePage() {
+    getWalletAddress().then(function (walletAddress) {
+        $("#profile-address").html(walletAddress);
+        contract.balances.call(walletAddress, function (err, balance) {
+            $("#profile-balance").html(parseFloat(balance / 1e18));
+        });
+        contract.BetPlaced({ user: walletAddress }, {  fromBlock: 1 })
+            .get(function (err, logs) {
+                var bets = logs.map(log => log.args);
+                var games = {}
+                bets.forEach(bet => games[bet.game_id] = {});
+                var game_ids = bets.forEach(bet => bet.game_id);
+                contract.GameCreated({ id: game_ids }, { fromBlock: 1 })
+                .get(function (err, logs) {
+                    logs.forEach(log => games[log.args.id] = log.args);
+                    bets.forEach(bet => {
+                        var game = games[bet.game_id];
+                        bet.team = bet.home ? game.home : game.away;
+                        bet.date = new Date(game.locktime * 1000).toLocaleDateString();
+                        addBetToTable("#profile-bets-table", bet);
+                    });
+                });
+            });
+        contract.Withdrawal({ user: walletAddress }, { fromBlock: 1})
+            .get(function (err, logs) {
+                var withdrawals = logs.map(log => log.args);
+                withdrawals.forEach(addWithdrawalToTable);
+            });
+        
+        $("#profile-withdraw").click(function () {
+            getWalletAddress().then(walletAddress => {
+                contract.withdraw({ from: walletAddress, gas: 200000 });
+                $("#profile-status").html("Withdrawing balance. Allow 1 min for processing");
+            });
+        });
+    });
+}
+
+function addWithdrawalToTable(withdrawal) {
+    console.log(withdrawal);
+    var timestamp = new Date(parseInt(withdrawal.timestamp) * 1000);
+    var dateString = timestamp.toLocaleDateString();
+    var timeString = timestamp.toLocaleTimeString();
+    var amount = parseFloat(withdrawal.amount / 1e18);
+    var row = `<tr>
+        <td>${dateString} ${timeString}</td>
+        <td class="currency">${amount}</td>
+    </tr>`;
+    $("#profile-withdrawals-table tbody").append(row);
 }

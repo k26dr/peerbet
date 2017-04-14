@@ -8,14 +8,17 @@ var abi = JSON.parse(fs.readFileSync("abi.json", "ascii"));
 var contractAddress = fs.readFileSync("contract_address", "ascii");
 var contract = web3.eth.contract(abi).at(contractAddress);
 var walletAddress = web3.eth.accounts[0];
+var secondAddress = web3.eth.accounts[1];
 web3.personal.unlockAccount(walletAddress, process.argv[2]);
+web3.personal.unlockAccount(secondAddress, process.argv[2]);
 
+var thirty_secs = parseInt(new Date().getTime() / 1000) + 30;
 var three_days = parseInt(new Date().getTime() / 1000) + 3*3600*24;
 var three_hours = parseInt(new Date().getTime() / 1000) + 3*3600;
 var three_minutes = parseInt(new Date().getTime() / 1000) + 3*60;
 
 var games = [
-    ["New England", "Baltimore", 0, three_days],
+    ["New England", "Baltimore", 0, thirty_secs],
     ["San Francisco", "Seattle", 0, three_hours],
     ["Oakland", "Minnesota", 0, three_minutes],
     ["Jacksonville", "Indianapolis", 0, three_days],
@@ -34,9 +37,10 @@ var active_games = games.map(g => contract.getGameId.call(...g));
 
 for (var i=0; i < 100; i++) {
     var random_index = Math.floor(Math.random() * (active_games.length - 1));
-    var random_amount = Math.random() * 1000 * 1e17;
+    var random_amount = Math.random() * 100 * 1e17;
     var random_line = (Math.floor(Math.random() * 40) - 20) * 5; // -100 to 100 by 5s
+    var random_address = Math.random() > 0.5 ? walletAddress : secondAddress;
     var home = Math.random() > 0.5;
-    contract.bidSpread.sendTransaction(active_games[random_index], home, random_line, { from: walletAddress, value: random_amount , gas: 500000 });
+    contract.bidSpread.sendTransaction(active_games[random_index], home, random_line, { from: random_address, value: random_amount , gas: 500000 });
 }
 

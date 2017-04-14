@@ -13,6 +13,7 @@ contract SportsBet {
     event BetPlaced(bytes32 indexed game_id, BookType indexed book, 
         address indexed user, bool home, uint amount, int32 line);
     event GameScored(bytes32 indexed game_id, int homeScore, int awayScore);
+    event Withdrawal(address indexed user, uint amount, uint timestamp);
 
     struct Bid {
         address bidder;
@@ -59,8 +60,8 @@ contract SportsBet {
         owner = msg.sender;
     }
 
-	function createGame (string home, string away, uint16 category, uint64 locktime) returns (bytes32) {
-        if (msg.sender != owner) throw;
+	function createGame (string home, string away, uint16 category, uint64 locktime) returns (int) {
+        if (msg.sender != owner) return 1;
         bytes32 id = getGameId(home, away, category, locktime);
         mapping(uint => Book) books;
         Bid[] memory homeBids;
@@ -70,13 +71,40 @@ contract SportsBet {
         Game memory game = Game(id, home, away, category, locktime, GameStatus.Open, result);
         games.push(game);
         GameCreated(id, home, away, category, locktime);
-        return id;
+        return -1;
+    }
+    
+    function cancelOpenBids(bytes32 game_id) private returns (int) {
+        Game game = getGameById(game_id);
+        Book book = game.books[uint(BookType.Spread)];
+
+        for (uint i=0; i < book.homeBids.length; i++) {
+            Bid bid = book.homeBids[i];
+            if (bid.amount == 0)
+                continue;
+            balances[bid.bidder] += bid.amount;
+            delete book.homeBids[i];
+        }
+        for (i=0; i < book.awayBids.length; i++) {
+            bid = book.awayBids[i];
+            if (bid.amount == 0)
+                continue;
+            balances[bid.bidder] += bid.amount;
+            delete book.awayBids[i];
+        }
+
+        return -1;
     }
 
-    function setGameResult (bytes32 game_id, int homeScore, int awayScore) {
-        if (msg.sender != owner) throw;
+    function setGameResult (bytes32 game_id, int homeScore, int awayScore) returns (int) {
+        if (msg.sender != owner) return 1;
 
         Game game = getGameById(game_id);
+        if (game.locktime > now) return 2;
+        if (game.status == GameStatus.Scored) return 3;
+
+        cancelOpenBids(game_id);
+
         game.result.home = homeScore;
         game.result.away = awayScore;
         game.status = GameStatus.Scored;
@@ -85,6 +113,7 @@ contract SportsBet {
         // Currently only handles spread bets
         Bet[] bets = game.books[uint(BookType.Spread)].bets;
         int resultSpread = awayScore - homeScore;
+        resultSpread *= 10; // because bet.line is 10x the actual line
         for (uint i = 0; i < bets.length; i++) {
             Bet bet = bets[i];
             if (resultSpread > bet.line) 
@@ -97,8 +126,9 @@ contract SportsBet {
             }
             bet.status = BetStatus.Paid;
         }
+
+        return -1;
     }
-        
 
     // This will eventually be expanded to include MoneyLine and OverUnder bets
     // line is actually 10x the line to allow for half-point spreads
@@ -112,6 +142,7 @@ contract SportsBet {
             return 1;
         if (now > game.locktime) {
             game.status = GameStatus.Locked;    
+            cancelOpenBids(game_id);
             return 2;
         }
         if (line % 5 != 0)
@@ -399,18 +430,15 @@ contract SportsBet {
     }
 
 
-    function withdraw() returns (bool) {
+    function withdraw() returns (int) {
         var balance = balances[msg.sender];
         balances[msg.sender] = 0;
         if (!msg.sender.send(balance)) {
             balances[msg.sender] = balance;
-            return false;
+            return 1;
         }
-        return true;
+        Withdrawal(msg.sender, balance, now);
+        return -1;
     }
-
-    function getBalance(address account) constant returns (uint) {
-        return balances[account];
-    }        
 
 }

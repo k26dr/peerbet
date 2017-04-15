@@ -18,7 +18,7 @@ var tx = {
 }
 
 function getActiveGames() {
-    active_games = contract.getActiveGames.call();
+    active_games = contract.getActiveGames.call({ from: walletAddress });
     if (active_games.length == 0)
         setTimeout(getActiveGames, 100);
 }
@@ -62,6 +62,6 @@ function watch () {
     contract.BetPlaced().watch(console.log);
 }
 
-getActiveGames()
+//getActiveGames()
 
 eval(require('locus'));

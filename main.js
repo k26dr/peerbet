@@ -86,7 +86,7 @@ function getGames () {
             resolve(getGames.prototype.games);
         else {
             contract.getActiveGames.call(function (err, game_ids) {
-                contract.GameCreated({ id: game_ids }, { fromBlock: 1 })
+                contract.GameCreated({ id: game_ids }, { fromBlock: 3541900 })
                     .get(function (err, logs) {
                         var games = logs.map(log => log.args);
                         // cache then resolve
@@ -162,7 +162,7 @@ function getBets(game_id) {
         if (getBets.prototype.game_id == game_id)
             resolve(getBets.prototype.bets);
         else {
-            contract.BetPlaced({ game_id: game_id }, { fromBlock: 1 })
+            contract.BetPlaced({ game_id: game_id }, { fromBlock: 3541900 })
                 .get(function (err, logs) {
                     var bets = logs.map(log => log.args);
                     getBets.prototype.game_id = game_id;
@@ -180,7 +180,7 @@ function getMyBets(game_id) {
             resolve(getMyBets.prototype.bets);
         else {
             getWalletAddress().then(function (walletAddress) {
-                contract.BetPlaced({ game_id: game_id, user: walletAddress }, { fromBlock: 1 })
+                contract.BetPlaced({ game_id: game_id, user: walletAddress }, { fromBlock: 3541900 })
                     .get(function (err, logs) {
                         var bets = logs.map(log => log.args);
                         getMyBets.prototype.game_id = game_id;
@@ -293,6 +293,8 @@ function spreadShow(id) {
     });
     getBets(id).then(function (bets) {
         $("#view-container #bets-table tbody").empty(); 
+        if (bets.length == 0)
+            return false;
         bets.filter(bet => bet.home)
             .forEach(bet => addBetToTable("#bets-table", bet));
         var currentLine = bets.filter(bet => bet.home).reverse()[0].line / 10;
@@ -315,16 +317,21 @@ function spreadShow(id) {
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#home-line").val()) * 10;
             var amount = parseFloat($("#home-amount").val()) * 1e18;
-            contract.bidSpread(id, true, line, 
-                { from: walletAddress, value: amount , gas: 1000000 }, 
-                function (err, tx_hash) {
-                    $("#home-amount").val('');
-                    var team = $('.home').first().html();
-                    if (line > 0)
-                        line = '+' + line;
-                    var notice = `Bet placed. Allow 1 min for bet to process`;
-                    $("#bet-description-home").html(notice);
-                });
+            contract.bidSpread.estimateGas(id, true, line, function (err, gas) {
+                gas = 500000;
+                contract.bidSpread.sendTransaction(id, true, line, 
+                    { from: walletAddress, value: amount , gas: gas }, 
+                    function (err, tx_hash) {
+                        if (!tx_hash) // rejected transaction
+                            return false;
+                        $("#home-amount").val('');
+                        var team = $('.home').first().html();
+                        if (line > 0)
+                            line = '+' + line;
+                        var notice = `Bet placed. Allow 1 min for bet to process`;
+                        $("#bet-description-home").html(notice);
+                    });
+            });
         });
         $("#place-bet-away").click(function () {
             if ($("#away-amount").val().trim() == '' || 
@@ -333,16 +340,21 @@ function spreadShow(id) {
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#away-line").val()) * 10;
             var amount = parseFloat($("#away-amount").val()) * 1e18;
-            contract.bidSpread(id, false, line, 
-                { from: walletAddress, value: amount , gas: 500000 },
-                function (err, tx_hash) {
-                    $("#away-amount").val('');
-                    var team = $('.away').first().html();
-                    if (line > 0)
-                        line = '+' + line;
-                    var notice = `Bet placed. Allow 1 min for bet to process`;
-                    $("#bet-description-away").html(notice);
-                });
+            contract.bidSpread.estimateGas(id, false, line, function (err, gas) {
+                gas = 500000;
+                contract.bidSpread(id, false, line, 
+                    { from: walletAddress, value: amount , gas: gas },
+                    function (err, tx_hash) {
+                        if (!tx_hash) // rejected transaction
+                            return false;
+                        $("#away-amount").val('');
+                        var team = $('.away').first().html();
+                        if (line > 0)
+                            line = '+' + line;
+                        var notice = `Bet placed. Allow 1 min for bet to process`;
+                        $("#bet-description-away").html(notice);
+                    });
+            });
         });
     });
 
@@ -496,7 +508,7 @@ function adminPage () {
         adminPage.prototype.games = games;
         var game_ids = games.map(game => game.id);
         games.forEach(game => game.result = { home: '', away: '' });
-        contract.GameScored({ game_id: game_ids }, { fromBlock: 1 })
+        contract.GameScored({ game_id: game_ids }, { fromBlock: 3541900 })
             .get(function (err, logs) {
                 var scores  = logs.map(log => log.args);
                 scores.forEach(function (score) {
@@ -517,9 +529,10 @@ function adminPage () {
             var offset = new Date().getTimezoneOffset() * 60 * 1000;
             var locktime = parseInt((document.querySelector("#create-game-locktime").valueAsNumber + offset) / 1000);
             contract.createGame(home, away, category, locktime, 
-                { from: walletAddress, gas: 400000 });
-            $("#admin-status").html("Creating game. Transaction sent");
-            $(".create-game-input").val('');
+                { from: walletAddress, gas: 400000 }, function (err, tx_hash) {
+                    $("#admin-status").html("Creating game. Transaction sent");
+                    $(".create-game-input").val('');
+                });
         });
     });
 
@@ -544,13 +557,13 @@ function profilePage() {
             if (balance == 0)
                 $("#profile-withdraw").hide();
         });
-        contract.BetPlaced({ user: walletAddress }, {  fromBlock: 1 })
+        contract.BetPlaced({ user: walletAddress }, {  fromBlock: 3541900 })
             .get(function (err, logs) {
                 var bets = logs.map(log => log.args);
                 var games = {}
                 bets.forEach(bet => games[bet.game_id] = {});
                 var game_ids = bets.forEach(bet => bet.game_id);
-                contract.GameCreated({ id: game_ids }, { fromBlock: 1 })
+                contract.GameCreated({ id: game_ids }, { fromBlock: 3541900 })
                 .get(function (err, logs) {
                     logs.forEach(log => games[log.args.id] = log.args);
                     $("#profile-bets-table tbody").empty();
@@ -562,7 +575,7 @@ function profilePage() {
                     });
                 });
             });
-        contract.Withdrawal({ user: walletAddress }, { fromBlock: 1})
+        contract.Withdrawal({ user: walletAddress }, { fromBlock: 3541900 })
             .get(function (err, logs) {
                 var withdrawals = logs.map(log => log.args);
                 $("#profile-withdrawals-table tbody").empty();

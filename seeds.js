@@ -28,7 +28,6 @@ var games = [
 games.forEach(function (game) {
     contract.createGame.sendTransaction(...game, { 
         from: walletAddress, 
-        to: contract.address,
         gas: 200000
     });
 });

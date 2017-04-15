@@ -18,7 +18,8 @@ var sportsbet = SportsBet.new(
    {
      from: walletAddress, 
      data: compiled.code,
-     gas: 4700000
+     gas: 4000000,
+     gasPrice: 2.1e10
    }, function (e, contract){
     if (e) console.log(e);
     if (typeof contract.address !== 'undefined') {

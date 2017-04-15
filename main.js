@@ -42,6 +42,7 @@ function route(page, params) {
             $("#view-container").html($("#admin").html());
             adminPage();
             break;
+        case 'withdraw':
         case 'profile':
             $("#view-container").html($("#profile").html());
             profilePage();
@@ -56,10 +57,16 @@ function route(page, params) {
 
 function getWalletAddress () {
     return new Promise(function (resolve, reject) {
-        // get cached if available
-        if (sessionStorage.walletAddress)
+        // metamask
+        if (web3 && web3.eth.accounts[0]) {
+            var walletAddress = web3.eth.accounts[0];
+            sessionStorage.walletAddress = walletAddress;
+            resolve(walletAddress);
+        }
+        // get cached if available for mist
+        else if (sessionStorage.walletAddress)
             resolve(sessionStorage.walletAddress);
-        else {
+        else if (typeof mist !== 'undefined') {
             mist.requestAccount(function (err, walletAddress) {
                 if (err) reject(err);
                 else {
@@ -102,8 +109,8 @@ function getGame(id) {
 }
 
 function gamesList () {
-    $("#games-table tbody").empty();
     getGames().then(function (games) {
+        $("#games-table tbody").empty();
         games.forEach(game => addGameToTable(game, dictionary.categories, "#games-table"));
     });
 }
@@ -258,7 +265,7 @@ function updateBids (game_id) {
     
 
 function spreadShow(id) {
-    $("#home-bids-table tbody, #away-bids-table tbody, #bets-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
+    $("#home-bids-table tbody, #away-bids-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
 
     getGame(id).then(function (game) {
         $('.home').html(game.home);
@@ -285,6 +292,7 @@ function spreadShow(id) {
         }
     });
     getBets(id).then(function (bets) {
+        $("#view-container #bets-table tbody").empty(); 
         bets.filter(bet => bet.home)
             .forEach(bet => addBetToTable("#bets-table", bet));
         var currentLine = bets.filter(bet => bet.home).reverse()[0].line / 10;
@@ -307,14 +315,16 @@ function spreadShow(id) {
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#home-line").val()) * 10;
             var amount = parseFloat($("#home-amount").val()) * 1e18;
-            contract.bidSpread.sendTransaction(id, true, line, 
-                { from: walletAddress, value: amount , gas: 1000000 });
-            $("#home-amount").val('');
-            var team = $('.home').first().html();
-            if (line > 0)
-                line = '+' + line;
-            var notice = `Bet placed. Allow 30 sec for bet to process`;
-            $("#bet-description-home").html(notice);
+            contract.bidSpread(id, true, line, 
+                { from: walletAddress, value: amount , gas: 1000000 }, 
+                function (err, tx_hash) {
+                    $("#home-amount").val('');
+                    var team = $('.home').first().html();
+                    if (line > 0)
+                        line = '+' + line;
+                    var notice = `Bet placed. Allow 1 min for bet to process`;
+                    $("#bet-description-home").html(notice);
+                });
         });
         $("#place-bet-away").click(function () {
             if ($("#away-amount").val().trim() == '' || 
@@ -323,14 +333,16 @@ function spreadShow(id) {
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#away-line").val()) * 10;
             var amount = parseFloat($("#away-amount").val()) * 1e18;
-            contract.bidSpread.sendTransaction(id, false, line, 
-            { from: walletAddress, value: amount , gas: 500000 });
-            $("#away-amount").val('');
-            var team = $('.away').first().html();
-            if (line > 0)
-                line = '+' + line;
-            var notice = `Bet placed. Allow 30 sec for bet to process`;
-            $("#bet-description-away").html(notice);
+            contract.bidSpread(id, false, line, 
+                { from: walletAddress, value: amount , gas: 500000 },
+                function (err, tx_hash) {
+                    $("#away-amount").val('');
+                    var team = $('.away').first().html();
+                    if (line > 0)
+                        line = '+' + line;
+                    var notice = `Bet placed. Allow 1 min for bet to process`;
+                    $("#bet-description-away").html(notice);
+                });
         });
     });
 
@@ -344,7 +356,10 @@ function spreadShow(id) {
             var home = team == game.home;
             var line = parseFloat($parentRow.find("td").eq(1).html()) * 10;
             contract.cancelBid.sendTransaction(walletAddress, game_id, 
-                line, home, { from: walletAddress, gas: 200000 });
+                line, home, { from: walletAddress, gas: 200000 },
+                function (err, tx_hash) {
+                    $parentRow.remove();
+                });
         });
     });
 
@@ -438,7 +453,7 @@ function addBetToTable(table, bet) {
     row += `<td>${line}</td>
         <td class="currency">${amount}</td>
     </tr>`;
-    $(table + " tbody").prepend(row);
+    $("#view-container " + table + " tbody").prepend(row);
 }
 
 function parseBid(hex) {
@@ -526,6 +541,8 @@ function profilePage() {
         $("#profile-address").html(walletAddress);
         contract.balances.call(walletAddress, function (err, balance) {
             $("#profile-balance").html(parseFloat(balance / 1e18));
+            if (balance == 0)
+                $("#profile-withdraw").hide();
         });
         contract.BetPlaced({ user: walletAddress }, {  fromBlock: 1 })
             .get(function (err, logs) {
@@ -536,6 +553,7 @@ function profilePage() {
                 contract.GameCreated({ id: game_ids }, { fromBlock: 1 })
                 .get(function (err, logs) {
                     logs.forEach(log => games[log.args.id] = log.args);
+                    $("#profile-bets-table tbody").empty();
                     bets.forEach(bet => {
                         var game = games[bet.game_id];
                         bet.team = bet.home ? game.home : game.away;
@@ -547,20 +565,22 @@ function profilePage() {
         contract.Withdrawal({ user: walletAddress }, { fromBlock: 1})
             .get(function (err, logs) {
                 var withdrawals = logs.map(log => log.args);
+                $("#profile-withdrawals-table tbody").empty();
                 withdrawals.forEach(addWithdrawalToTable);
             });
         
         $("#profile-withdraw").click(function () {
             getWalletAddress().then(walletAddress => {
-                contract.withdraw({ from: walletAddress, gas: 200000 });
-                $("#profile-status").html("Withdrawing balance. Allow 1 min for processing");
+                contract.withdraw({ from: walletAddress, gas: 50000 },
+                    function (err, tx_hash) {
+                        $("#profile-status").html("Withdrawing balance. Allow 1 min for processing. Attempting to withdraw again will fail.");
+                    });
             });
         });
     });
 }
 
 function addWithdrawalToTable(withdrawal) {
-    console.log(withdrawal);
     var timestamp = new Date(parseInt(withdrawal.timestamp) * 1000);
     var dateString = timestamp.toLocaleDateString();
     var timeString = timestamp.toLocaleTimeString();

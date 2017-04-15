@@ -1,6 +1,12 @@
 #view-container {
     min-height: 85%;
 }
+#navbar {
+    border-radius: 2px;
+}
+#navbar .navbar-brand {
+    color: #dcdcdc;
+}
 .page {
     display:none;
 }
@@ -20,4 +26,9 @@ footer {
 }
 .currency {
     text-align: right;
+}
+#profile-status {
+    font-weight: bold;
+    margin-bottom: 5px;
+    text-align: center;
 }

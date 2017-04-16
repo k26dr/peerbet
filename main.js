@@ -9,7 +9,15 @@ var dictionary;
 var global_intervals = [];
 var global_filters = [];
 
-$.when(contractAddressPromise, abiPromise, dictionaryPromise, docReady).always(function (contractAddress, abiJSON, dictionary) {
+var web3Promise = new Promise(function (resolve, reject) {
+    var interval = setInterval(function () {
+        if (typeof web3 !== 'undefined') {
+            resolve(web3);
+            clearInterval(interval);
+        }
+    }, 50);
+});
+$.when(contractAddressPromise, abiPromise, dictionaryPromise, docReady, web3Promise).always(function (contractAddress, abiJSON, dictionary) {
     var contractAddress = contractAddress[0];
     var abi = abiJSON[0];
     window.dictionary = dictionary[0];

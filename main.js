@@ -292,11 +292,17 @@ function spreadShow(id) {
         var tenMinutes = 10*60*1000;
         if (locktime - now < tenMinutes) {
             $("#bet-placements, #open-bids-row").hide();
-            $(".game-status").html("Betting is closed");
+            $(".game-status")
+                .removeClass('open')
+                .addClass('closed')
+                .html("Betting is closed");
         }
         else {
             $("#bet-placements, #open-bids-row").show();
-            $(".game-status").html("Betting locks 10 min prior to gametime");
+            $(".game-status")
+                .removeClass('closed')
+                .addClass('open')
+                .html("Betting locks 10 min prior to gametime");
         }
     });
     getBets(id).then(function (bets) {

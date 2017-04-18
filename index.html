@@ -7,7 +7,6 @@
 </head>
 
 <body>
-
     <!-- Navbar -->
 	<nav class="navbar navbar-inverse" id="navbar">
 	  <div class="container-fluid">
@@ -18,6 +17,7 @@
 		<div class="collapse navbar-collapse">
 		  <ul class="nav navbar-nav">
 			<li><a class="navbar-link" href="#games">Games</a></li>
+            <li><a class="navbar-link" href="#results">Results</a></li>
 			<li><a class="navbar-link" href="#profile">Profile</a></li>
 			<li><a class="navbar-link" href="#withdraw">Withdraw</a></li>
 		  </ul>
@@ -49,7 +49,28 @@
 
 <section class="page" id="games">
     <h1>Games</h1>
-    <table id="games-table" class="table table-striped table-bordered">
+    <table id="games-table" class="table table-striped">
+        <thead>
+            <tr>
+                <th>Home</th>
+                <th>Away</th>
+                <th>Category</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Bets</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="6">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
+<section class="page" id="results">
+    <h1>Results</h1>
+    <table id="results-table" class="table table-striped">
         <thead>
             <tr>
                 <th>Home</th>
@@ -70,7 +91,9 @@
 
 <section class="page" id="spread">
     <h1>
+        <span class="logo logo-home"></span>
         <span class="home">Home</span> vs <span class="away">Away</span>
+        <span class="logo logo-away"></span>
     </h1>
 
     <div>
@@ -95,8 +118,8 @@
                 <label id="bet-description-home" class="bet-description"></label>
             </div>
             <div class="form-group">
-                <button class="btn btn-primary place-bet" id="place-bet-home">
-                    Place Bet
+                <button class="btn place-bet" id="place-bet-home">
+                    PLACE BET
                 </button>
             </div>
         </div>
@@ -117,8 +140,8 @@
                 <label id="bet-description-away" class="bet-description"></label>
             </div>
             <div class="form-group">
-                <button class="btn btn-primary place-bet" id="place-bet-away">
-                    Place Bet
+                <button class="btn place-bet" id="place-bet-away">
+                    PLACE BET
                 </button>
             </div>
         </div>
@@ -126,9 +149,9 @@
 
     <div class="row" id="open-bids-row">
         <div class="col-md-6">
-            <h3>Open <span class="home">Home</span> Bids</h3>
+            <h4>Open <span class="home">Home</span> Bids</h4>
             <div class="pane">
-                <table id="home-bids-table" class="table table-striped table-bordered">
+                <table id="home-bids-table" class="table table-striped">
                     <thead>
                         <tr>
                             <th>Line</th>
@@ -141,9 +164,9 @@
         </div>
 
         <div class="col-md-6">
-            <h3>Open <span class="away">Away</span> Bids</h3>
+            <h4>Open <span class="away">Away</span> Bids</h4>
             <div class="pane">
-                <table id="away-bids-table" class="table table-striped table-bordered">
+                <table id="away-bids-table" class="table table-striped">
                     <thead>
                         <tr>
                             <th>Line</th>
@@ -156,11 +179,13 @@
         </div>
     </div>
 
-    <div class="row">
+    <hr class="divider">
+
+    <div class="row" id="bets-row">
         <div class="col-md-6">
-            <h3>Latest Bets</h3>
+            <h4>Latest Bets</h4>
             <div class="pane">
-                <table id="bets-table" class="table table-striped table-bordered">
+                <table id="bets-table" class="table table-striped">
                     <thead>
                         <tr>
                             <th>Line (<span class="home">Home</span>)</th>
@@ -177,8 +202,8 @@
         </div>
 
         <div class="col-md-6">
-            <h3>My Bets</h3>
-            <table id="my-bets-table" class="table table-striped table-bordered">
+            <h4>My Bets</h4>
+            <table id="my-bets-table" class="table table-striped">
                 <thead>
                     <tr>
                         <th>Team</th>
@@ -189,8 +214,8 @@
                 <tbody></tbody>
             </table>
 
-            <h3>My Open Bids</h3>
-            <table id="my-bids-table" class="table table-striped table-bordered">
+            <h4>My Open Bids</h4>
+            <table id="my-bids-table" class="table table-striped">
                 <thead>
                     <tr>
                         <th>Team</th>
@@ -212,11 +237,11 @@
 
     <h3>Create Game</h3>
     <div>
-        <label>Home</label>
-        <input id="create-game-home" class="create-game-input">
-
         <label>Away</label>
         <input id="create-game-away" class="create-game-input">
+
+        <label>Home</label>
+        <input id="create-game-home" class="create-game-input">
 
         <label>Category</label>
         <input type="number" id="create-game-category" class="create-game-input">
@@ -227,7 +252,7 @@
         <button id="create-game-submit">Create Game</button>
     </div>
     <h3>Games</h3>
-    <table id="admin-games-table" class="table table-striped table-bordered">
+    <table id="admin-games-table" class="table table-striped">
         <thead>
             <tr>
                 <th>Home</th>
@@ -256,14 +281,14 @@
             <td>My Balance</td>
             <td>
                 <span id="profile-balance"></span> ETH
-                <button id="profile-withdraw">Withdraw</button>
+                <button class="btn btn-bet" id="profile-withdraw">WITHDRAW</button>
             </td>
         </tr>
     </table>
 
     <h3>My Bets</h3>
     <div class="pane">
-        <table id="profile-bets-table" class="table table-striped table-bordered">
+        <table id="profile-bets-table" class="table table-striped">
             <thead>
                 <tr>
                     <th>Date</th>

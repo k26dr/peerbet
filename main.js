@@ -4,8 +4,10 @@ $(docReady.resolve);
 var abiPromise = $.get("abi.json");
 var contractAddressPromise = $.get("contract_address");
 var dictionaryPromise = $.get("data_dictionary.json");
+var startBlockPromise = $.get("start_block");
 var contract;
 var dictionary;
+var startBlock;
 var global_intervals = [];
 var global_filters = [];
 
@@ -17,10 +19,12 @@ var web3Promise = new Promise(function (resolve, reject) {
         }
     }, 50);
 });
-$.when(contractAddressPromise, abiPromise, dictionaryPromise, docReady, web3Promise).always(function (contractAddress, abiJSON, dictionary) {
+$.when(contractAddressPromise, abiPromise, dictionaryPromise, startBlockPromise, docReady, web3Promise)
+    .always(function (contractAddress, abiJSON, dictionary, startBlock) {
     var contractAddress = contractAddress[0];
     var abi = abiJSON[0];
     window.dictionary = dictionary[0];
+    window.startBlock = startBlock[0];
     contract = web3.eth.contract(abi).at(contractAddress);
 
     routeFromURL();
@@ -44,7 +48,7 @@ function route(page, params) {
     switch (page) {
         case 'spread':
             $("#view-container").html($("#spread").html());
-            spreadShow(params[0]);
+            spreadPage(params[0]);
             break;
         case 'admin':
             $("#view-container").html($("#admin").html());
@@ -55,10 +59,14 @@ function route(page, params) {
             $("#view-container").html($("#profile").html());
             profilePage();
             break;
+        case 'results':
+            $("#view-container").html($("#results").html());
+            resultsPage();
+            break;
         case 'games':
         default:
             $("#view-container").html($("#games").html());
-            gamesList();
+            gamesPage();
     }
     $('#view-container').show();
 }
@@ -88,24 +96,40 @@ function getWalletAddress () {
 }
 
 function getGames () {
-    return new Promise(function (resolve, reject) {
-        // get cached if available
-        if (getGames.prototype.games)
-            resolve(getGames.prototype.games);
-        else {
-            contract.getActiveGames.call(function (err, game_ids) {
-                contract.GameCreated({ id: game_ids }, { fromBlock: 3541900 })
-                    .get(function (err, logs) {
-                        var games = logs.map(log => log.args);
-                        // cache then resolve
-                        games.sort(function (a,b) {
-                            return a.locktime - b.locktime;
-                        });
-                        getGames.prototype.games = games;
-                        resolve(games);
-                    });
-            });
-        }
+    // get cached if available
+    if (getGames.prototype.games)
+        return Promise.resolve(getGames.prototype.games);
+
+    var activeGamesPromise = new Promise((resolve, reject) => {
+        contract.getActiveGames.call(function (err, game_ids) {
+            if (err) reject(err);
+            else resolve(game_ids);
+        });
+    });
+    var gamesPromise = new Promise((resolve, reject) => {
+        activeGamesPromise.then(game_ids => {
+            contract.GameCreated({ id: game_ids }, { fromBlock: startBlock })
+                .get(function (err, logs) {
+                    var games = logs.map(log => log.args);
+                    resolve(games);
+                });
+        });
+    });
+    var scoresPromise = new Promise((resolve, reject) => {
+        activeGamesPromise.then(game_ids => {
+            contract.GameScored({ game_id: game_ids }, { fromBlock: startBlock })
+                .get((err, logs) => {
+                    var scores = logs.map(log => log.args);
+                    resolve(scores);
+                });
+        });
+    });
+    // TODO include scores in games
+    return new Promise((resolve, reject) => {
+        $.when(gamesPromise).then(games => {
+            getGames.prototype.games = games;
+            resolve(games);
+        });
     });
 }
 
@@ -116,10 +140,21 @@ function getGame(id) {
     })
 }
 
-function gamesList () {
+function gamesPage() {
     getGames().then(function (games) {
         $("#games-table tbody").empty();
-        games.forEach(game => addGameToTable(game, dictionary.categories, "#games-table"));
+        var now = new Date().getTime() / 1000;
+        games.filter(game => game.locktime > now)
+            .forEach(game => addGameToTable(game, dictionary.categories, "#games-table"));
+    });
+}
+
+function resultsPage () {
+    getGames().then(function (games) {
+        $("#results-table tbody").empty();
+        var now = new Date().getTime() / 1000;
+        games.filter(game => game.locktime < now).reverse()
+            .forEach(game => addGameToTable(game, dictionary.categories, "#results-table"));
     });
 }
 
@@ -131,24 +166,55 @@ function addGameToTable (game, categories, table) {
     var time = gametime.toTimeString().slice(0,8);
 
     var row = `<tr class="game">
-        <td>${game.home}</td>
-        <td>${game.away}</td>
+        <td>
+            <div class="logo logo-home"></div>
+            <span class="home">${game.home}</span>
+        </td>
+        <td>
+            <div class="logo logo-away"></div>
+            <span class="away">${game.away}</span>
+        </td>
         <td>${category}</td>
         <td>${date}</td>
         <td>${time}</td>`;
-    if (table == '#admin-games-table' && (game.status > 0 || new Date() > gametime)) {
+    if (table == '#admin-games-table' && 
+        (game.status > 0 || new Date() > gametime)) {
         row += `<td>
             <input type="number" class="score-home" value="${game.result.home}"> -
             <input type="number" class="score-away" value="${game.result.away}">
             <button class="score-game">Score</button>
         </td>`;
     }
-    else
-        row += `<td><a href="#spread_${game.id}">Spread</a></td>`;
+    else {
+        row += `<td>
+            <a href="#spread_${game.id}">
+                <button class="btn btn-bet">SPREAD</button> 
+            </a>
+        </td>`;
+    }
     row += `</tr>`;
     $(`#view-container ${table} tbody`).append(row);
     $(`#view-container ${table} tr`).last().data('id', game.id);
+
+    // set logos
+    var homePos = getLogoPosition(game.home);
+    var awayPos = getLogoPosition(game.away);
+    $(`#view-container ${table} .logo-home`).last()
+        .css('background-position-x', homePos.x)
+        .css('background-position-y', homePos.y);
+    $(`#view-container ${table} .logo-away`).last()
+        .css('background-position-x', awayPos.x)
+        .css('background-position-y', awayPos.y);
 }
+
+function getLogoPosition(team) {
+    var index = dictionary.logos.NBA.indexOf(team);
+    return {
+        x: -16 - 37*(index % 6), 
+        y: -14 - 35*Math.floor(index / 6)
+    }
+}
+    
 
 function getETHtoUSDConversion () {
     return new Promise(function (resolve, reject) {
@@ -170,7 +236,7 @@ function getBets(game_id) {
         if (getBets.prototype.game_id == game_id)
             resolve(getBets.prototype.bets);
         else {
-            contract.BetPlaced({ game_id: game_id }, { fromBlock: 3541900 })
+            contract.BetPlaced({ game_id: game_id }, { fromBlock: startBlock })
                 .get(function (err, logs) {
                     var bets = logs.map(log => log.args);
                     getBets.prototype.game_id = game_id;
@@ -188,7 +254,7 @@ function getMyBets(game_id) {
             resolve(getMyBets.prototype.bets);
         else {
             getWalletAddress().then(function (walletAddress) {
-                contract.BetPlaced({ game_id: game_id, user: walletAddress }, { fromBlock: 3541900 })
+                contract.BetPlaced({ game_id: game_id, user: walletAddress }, { fromBlock: startBlock })
                     .get(function (err, logs) {
                         var bets = logs.map(log => log.args);
                         getMyBets.prototype.game_id = game_id;
@@ -272,12 +338,22 @@ function updateBids (game_id) {
 }
     
 
-function spreadShow(id) {
+function spreadPage(id) {
     $("#home-bids-table tbody, #away-bids-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
 
     getGame(id).then(function (game) {
         $('.home').html(game.home);
         $('.away').html(game.away);
+
+        // display logos
+        var homePos = getLogoPosition(game.home);
+        var awayPos = getLogoPosition(game.away);
+        $(`#view-container .logo-home`)
+            .css('background-position-x', homePos.x)
+            .css('background-position-y', homePos.y);
+        $(`#view-container .logo-away`)
+            .css('background-position-x', awayPos.x)
+            .css('background-position-y', awayPos.y);
 
         // Display gametime 
         var locktime = new Date(game.locktime * 1000);
@@ -292,11 +368,17 @@ function spreadShow(id) {
         var tenMinutes = 10*60*1000;
         if (locktime - now < tenMinutes) {
             $("#bet-placements, #open-bids-row").hide();
-            $(".game-status").html("Betting is closed");
+            $(".game-status")
+                .removeClass('open')
+                .addClass('closed')
+                .html("Betting is closed");
         }
         else {
             $("#bet-placements, #open-bids-row").show();
-            $(".game-status").html("Betting locks 10 min prior to gametime");
+            $(".game-status")
+                .removeClass('closed')
+                .addClass('open')
+                .html("Betting locks 10 min prior to gametime");
         }
     });
     getBets(id).then(function (bets) {
@@ -319,9 +401,14 @@ function spreadShow(id) {
 
     // listeners for bet placement
     getWalletAddress().then(function (walletAddress) {
-        $("#place-bet-home").click(function () {
+        $("#place-bet-home").click(function (e) {
             if ($("#home-amount").val().trim() == '' || $("#home-line").val().trim() == '')
                 return false;
+
+            // prevent double betting
+            e.target.disabled = true; 
+            setTimeout(() => e.target.disabled = false, 3000);
+
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#home-line").val()) * 10;
             var amount = parseFloat($("#home-amount").val()) * 1e18;
@@ -330,21 +417,28 @@ function spreadShow(id) {
                 contract.bidSpread.sendTransaction(id, true, line, 
                     { from: walletAddress, value: amount , gas: gas }, 
                     function (err, tx_hash) {
+                        e.target.disabled = false;
                         if (!tx_hash) // rejected transaction
                             return false;
                         $("#home-amount").val('');
                         var team = $('.home').first().html();
                         if (line > 0)
                             line = '+' + line;
-                        var notice = `Bet placed. Allow 1 min for bet to process`;
+                        var notice = `Bet placed. Transaction processing. View status 
+                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`;
                         $("#bet-description-home").html(notice);
                     });
             });
         });
-        $("#place-bet-away").click(function () {
+        $("#place-bet-away").click(function (e) {
             if ($("#away-amount").val().trim() == '' || 
                 $("#away-line").val().trim() == '')
                 return false;
+
+            // prevent double betting
+            e.target.disabled = true; 
+            setTimeout(() => e.target.disabled = false, 3000);
+
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#away-line").val()) * 10;
             var amount = parseFloat($("#away-amount").val()) * 1e18;
@@ -353,13 +447,15 @@ function spreadShow(id) {
                 contract.bidSpread(id, false, line, 
                     { from: walletAddress, value: amount , gas: gas },
                     function (err, tx_hash) {
+                        e.target.disabled = false;
                         if (!tx_hash) // rejected transaction
                             return false;
                         $("#away-amount").val('');
                         var team = $('.away').first().html();
                         if (line > 0)
                             line = '+' + line;
-                        var notice = `Bet placed. Allow 1 min for bet to process`;
+                        var notice = `Bet placed. Transaction processing. View status 
+                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`;
                         $("#bet-description-away").html(notice);
                     });
             });
@@ -516,7 +612,7 @@ function adminPage () {
         adminPage.prototype.games = games;
         var game_ids = games.map(game => game.id);
         games.forEach(game => game.result = { home: '', away: '' });
-        contract.GameScored({ game_id: game_ids }, { fromBlock: 3541900 })
+        contract.GameScored({ game_id: game_ids }, { fromBlock: startBlock })
             .get(function (err, logs) {
                 var scores  = logs.map(log => log.args);
                 scores.forEach(function (score) {
@@ -565,13 +661,13 @@ function profilePage() {
             if (balance == 0)
                 $("#profile-withdraw").hide();
         });
-        contract.BetPlaced({ user: walletAddress }, {  fromBlock: 3541900 })
+        contract.BetPlaced({ user: walletAddress }, {  fromBlock: startBlock })
             .get(function (err, logs) {
                 var bets = logs.map(log => log.args);
                 var games = {}
                 bets.forEach(bet => games[bet.game_id] = {});
                 var game_ids = bets.forEach(bet => bet.game_id);
-                contract.GameCreated({ id: game_ids }, { fromBlock: 3541900 })
+                contract.GameCreated({ id: game_ids }, { fromBlock: startBlock })
                 .get(function (err, logs) {
                     logs.forEach(log => games[log.args.id] = log.args);
                     $("#profile-bets-table tbody").empty();
@@ -583,18 +679,24 @@ function profilePage() {
                     });
                 });
             });
-        contract.Withdrawal({ user: walletAddress }, { fromBlock: 3541900 })
+        contract.Withdrawal({ user: walletAddress }, { fromBlock: startBlock })
             .get(function (err, logs) {
                 var withdrawals = logs.map(log => log.args);
                 $("#profile-withdrawals-table tbody").empty();
                 withdrawals.forEach(addWithdrawalToTable);
             });
         
-        $("#profile-withdraw").click(function () {
+        $("#profile-withdraw").click(function (e) {
+            e.target.disabled = true;
             getWalletAddress().then(walletAddress => {
                 contract.withdraw({ from: walletAddress, gas: 50000 },
                     function (err, tx_hash) {
-                        $("#profile-status").html("Withdrawing balance. Allow 1 min for processing. Attempting to withdraw again will fail.");
+                        if (err) {
+                            e.target.disabled = false;
+                            return false;
+                        }
+                        $("#profile-status").html(`Withdrawal initiated. View status 
+                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`);
                     });
             });
         });

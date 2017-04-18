@@ -18,12 +18,12 @@ var three_hours = parseInt(new Date().getTime() / 1000) + 3*3600;
 var three_minutes = parseInt(new Date().getTime() / 1000) + 3*60;
 
 var games = [
-    ["New England", "Baltimore", 0, thirty_secs],
-    ["San Francisco", "Seattle", 0, three_hours],
-    ["Oakland", "Minnesota", 0, three_minutes],
-    ["Jacksonville", "Indianapolis", 0, three_days],
-    ["Golden State", "Utah", 1, three_hours],
-    ["Oklahoma City", "Miami", 1, three_minutes]
+    ["Cleveland", "Indiana", 1, thirty_secs],
+    ["San Antonio", "Memphis", 1, three_hours],
+    ["Boston", "Chicago", 1, three_minutes],
+    ["Los Angeles Clippers", "Utah", 1, three_days],
+    ["Golden State", "Portland", 1, three_hours],
+    ["Oklahoma City", "Houston", 1, three_minutes]
 ]
 games.forEach(function (game) {
     contract.createGame.sendTransaction(...game, { 

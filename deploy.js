@@ -29,6 +29,7 @@ var sportsbet = SportsBet.new(
         fs.writeFileSync("abi.json", JSON.stringify(abi));
         fs.writeFileSync("bytecode", compiled.code);
         fs.writeFileSync("contract_address", contract.address);
+        fs.writeFileSync("start_block", web3.eth.blockNumber);
 
         if (process.argv[3] == "--debug") 
             eval(require('locus'));

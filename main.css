@@ -80,7 +80,7 @@ h4 {
     vertical-align: middle;
     margin-right: 5px;
 }
-#games-table td {
+#results-table td, #games-table td {
     vertical-align: middle;
     font-size: 16px;
 }
@@ -89,4 +89,8 @@ h4 {
     letter-spacing: 1px;
     background-color: #fdb913;
     color: black;
+}
+#profile-withdraw {
+    box-shadow: 10px 10px 25px -13px rgba(0,0,0,0.75);
+    margin-left: 5px;
 }

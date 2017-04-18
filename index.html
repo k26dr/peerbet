@@ -17,6 +17,7 @@
 		<div class="collapse navbar-collapse">
 		  <ul class="nav navbar-nav">
 			<li><a class="navbar-link" href="#games">Games</a></li>
+            <li><a class="navbar-link" href="#results">Results</a></li>
 			<li><a class="navbar-link" href="#profile">Profile</a></li>
 			<li><a class="navbar-link" href="#withdraw">Withdraw</a></li>
 		  </ul>
@@ -67,9 +68,32 @@
     </table>
 </section>
 
+<section class="page" id="results">
+    <h1>Results</h1>
+    <table id="results-table" class="table table-striped">
+        <thead>
+            <tr>
+                <th>Home</th>
+                <th>Away</th>
+                <th>Category</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Bets</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="6">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
 <section class="page" id="spread">
     <h1>
+        <span class="logo logo-home"></span>
         <span class="home">Home</span> vs <span class="away">Away</span>
+        <span class="logo logo-away"></span>
     </h1>
 
     <div>
@@ -257,7 +281,7 @@
             <td>My Balance</td>
             <td>
                 <span id="profile-balance"></span> ETH
-                <button id="profile-withdraw">Withdraw</button>
+                <button class="btn btn-bet" id="profile-withdraw">WITHDRAW</button>
             </td>
         </tr>
     </table>

@@ -126,7 +126,6 @@ function getGames () {
     });
     return new Promise((resolve, reject) => {
         $.when(gamesPromise, scoresPromise).then((games, scores) => {
-            console.log(games, scores);
             resolve(games);
         });
     });

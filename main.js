@@ -126,7 +126,6 @@ function getGames () {
     });
     return new Promise((resolve, reject) => {
         $.when(gamesPromise, scoresPromise).then((games, scores) => {
-            console.log(games, scores);
             resolve(games);
         });
     });
@@ -453,7 +452,8 @@ function spreadPage(id) {
                         var team = $('.away').first().html();
                         if (line > 0)
                             line = '+' + line;
-                        var notice = `Bet placed. Allow 1 min for bet to process`;
+                        var notice = `Bet placed. Transaction processing. View status 
+                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`;
                         $("#bet-description-away").html(notice);
                     });
             });

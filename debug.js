@@ -62,6 +62,6 @@ function watch () {
     contract.BetPlaced().watch(console.log);
 }
 
-//getActiveGames()
+getActiveGames()
 
 eval(require('locus'));

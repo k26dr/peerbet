@@ -124,8 +124,10 @@ function getGames () {
                 });
         });
     });
+    // TODO include scores in games
     return new Promise((resolve, reject) => {
-        $.when(gamesPromise, scoresPromise).then((games, scores) => {
+        $.when(gamesPromise).then(games => {
+            getGames.prototype.games = games;
             resolve(games);
         });
     });

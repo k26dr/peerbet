@@ -131,24 +131,55 @@ function addGameToTable (game, categories, table) {
     var time = gametime.toTimeString().slice(0,8);
 
     var row = `<tr class="game">
-        <td>${game.home}</td>
-        <td>${game.away}</td>
+        <td>
+            <div class="logo logo-home"></div>
+            <span class="home">${game.home}</span>
+        </td>
+        <td>
+            <div class="logo logo-away"></div>
+            <span class="away">${game.away}</span>
+        </td>
         <td>${category}</td>
         <td>${date}</td>
         <td>${time}</td>`;
-    if (table == '#admin-games-table' && (game.status > 0 || new Date() > gametime)) {
+    if (table == '#admin-games-table' && 
+        (game.status > 0 || new Date() > gametime)) {
         row += `<td>
             <input type="number" class="score-home" value="${game.result.home}"> -
             <input type="number" class="score-away" value="${game.result.away}">
             <button class="score-game">Score</button>
         </td>`;
     }
-    else
-        row += `<td><a href="#spread_${game.id}">Spread</a></td>`;
+    else {
+        row += `<td>
+            <a href="#spread_${game.id}">
+                <button class="btn btn-bet">SPREAD</button> 
+            </a>
+        </td>`;
+    }
     row += `</tr>`;
     $(`#view-container ${table} tbody`).append(row);
     $(`#view-container ${table} tr`).last().data('id', game.id);
+
+    // set logos
+    var homePos = getLogoPosition(game.home);
+    var awayPos = getLogoPosition(game.away);
+    $(`#view-container ${table} .logo-home`).last()
+        .css('background-position-x', homePos.x)
+        .css('background-position-y', homePos.y);
+    $(`#view-container ${table} .logo-away`).last()
+        .css('background-position-x', awayPos.x)
+        .css('background-position-y', awayPos.y);
 }
+
+function getLogoPosition(team) {
+    var index = dictionary.logos.NBA.indexOf(team);
+    return {
+        x: -16 - 37*(index % 6), 
+        y: -14 - 35*Math.floor(index / 6)
+    }
+}
+    
 
 function getETHtoUSDConversion () {
     return new Promise(function (resolve, reject) {
@@ -342,7 +373,8 @@ function spreadShow(id) {
                         var team = $('.home').first().html();
                         if (line > 0)
                             line = '+' + line;
-                        var notice = `Bet placed. Allow 1 min for bet to process`;
+                        var notice = `Bet placed. Transaction processing. View status 
+                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`;
                         $("#bet-description-home").html(notice);
                     });
             });

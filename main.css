@@ -1,5 +1,5 @@
 body {
-    font: lato;
+    font-family: lato;
 }
 #view-container {
     min-height: 85%;
@@ -9,6 +9,10 @@ body {
 }
 #navbar .navbar-brand {
     color: #dcdcdc;
+    font-size: 24px;
+}
+#navbar li a {
+    font-size: 16px;
 }
 .page {
     display:none;
@@ -65,4 +69,24 @@ h4 {
 }
 #open-bids-row th, #bets-row th {
     color: #696969;
+}
+.logo {
+    background-image: url(img/nba-logos-transparent.png);
+    height: 35px;
+    width: 33px;
+    background-position: -15px -15px;
+    background-size: 250px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+#games-table td {
+    vertical-align: middle;
+    font-size: 16px;
+}
+.btn-bet {
+    font-weight: bold;
+    letter-spacing: 1px;
+    background-color: #fdb913;
+    color: black;
 }

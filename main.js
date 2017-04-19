@@ -126,7 +126,19 @@ function getGames () {
     });
     // TODO include scores in games
     return new Promise((resolve, reject) => {
-        $.when(gamesPromise).then(games => {
+        $.when(gamesPromise, scoresPromise).then((games, scores) => {
+            var scoresObj = {}
+            scores.forEach(score => scoresObj[score.game_id] = score);
+            games.forEach(game => {
+                if (scoresObj[game.id]) {
+                    game.result = { 
+                        home: scoresObj[game.id].homeScore, 
+                        away: scoresObj[game.id].awayScore
+                    }
+                }
+                else
+                    game.result = { home: '-', away: '-' }
+            });
             getGames.prototype.games = games;
             resolve(games);
         });
@@ -145,6 +157,7 @@ function gamesPage() {
         $("#games-table tbody").empty();
         var now = new Date().getTime() / 1000;
         games.filter(game => game.locktime > now)
+            .sort((a,b) => a.locktime - b.locktime)
             .forEach(game => addGameToTable(game, dictionary.categories, "#games-table"));
     });
 }
@@ -153,7 +166,8 @@ function resultsPage () {
     getGames().then(function (games) {
         $("#results-table tbody").empty();
         var now = new Date().getTime() / 1000;
-        games.filter(game => game.locktime < now).reverse()
+        games.filter(game => game.locktime < now)
+            .sort((a,b) => b.locktime - a.locktime)
             .forEach(game => addGameToTable(game, dictionary.categories, "#results-table"));
     });
 }
@@ -162,8 +176,8 @@ function resultsPage () {
 function addGameToTable (game, categories, table) {
     var category = categories[parseInt(game.category)];
     var gametime = new Date(parseInt(game.locktime) * 1000);
-    var date = gametime.toISOString().slice(0,10);
-    var time = gametime.toTimeString().slice(0,8);
+    var date = gametime.toString().slice(0,10);
+    var time = gametime.toTimeString().slice(0,5);
 
     var row = `<tr class="game">
         <td>
@@ -173,8 +187,10 @@ function addGameToTable (game, categories, table) {
         <td>
             <div class="logo logo-away"></div>
             <span class="away">${game.away}</span>
-        </td>
-        <td>${category}</td>
+        </td>`;
+    if (table == "#results-table")
+        row += `<td>${game.result.home} - ${game.result.away}</td>`;
+    row += ` <td>${category}</td>
         <td>${date}</td>
         <td>${time}</td>`;
     if (table == '#admin-games-table' && 
@@ -340,6 +356,7 @@ function updateBids (game_id) {
 
 function spreadPage(id) {
     $("#home-bids-table tbody, #away-bids-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
+    $("#score-row").hide();
 
     getGame(id).then(function (game) {
         $('.home').html(game.home);
@@ -379,6 +396,13 @@ function spreadPage(id) {
                 .removeClass('closed')
                 .addClass('open')
                 .html("Betting locks 10 min prior to gametime");
+        }
+
+        // Display scores
+        if (now > locktime) {
+            $('.home-score').html(`${game.result.home}`);
+            $('.away-score').html(`${game.result.away}`);
+            $('#score-row').show();
         }
     });
     getBets(id).then(function (bets) {

@@ -1,5 +1,6 @@
 body {
     font-family: lato;
+    font-size: 16px;
 }
 #view-container {
     min-height: 85%;
@@ -93,4 +94,7 @@ h4 {
 #profile-withdraw {
     box-shadow: 10px 10px 25px -13px rgba(0,0,0,0.75);
     margin-left: 5px;
+}
+.game-score {
+    color: blue;
 }

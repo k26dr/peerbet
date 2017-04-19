@@ -75,6 +75,7 @@
             <tr>
                 <th>Home</th>
                 <th>Away</th>
+                <th>Score</th>
                 <th>Category</th>
                 <th>Date</th>
                 <th>Time</th>
@@ -99,6 +100,14 @@
     <div>
         Gametime: <span class="locktime"></span> - 
         <span class="game-status">Betting locks 10 min prior to gametime</span>
+    </div>
+
+    <div>
+        Final Score: 
+        <span class="game-score">
+            <span class="home-score"></span> - 
+            <span class="away-score"></span>
+        </span>
     </div>
     
     <div class="row" id="bet-placements">
@@ -310,7 +319,7 @@
         <table id="profile-withdrawals-table" class="table">
             <thead>
                 <tr>
-                    <th>Time</th>
+                    <th>Date</th>
                     <th class="currency">Amount (ETH)</th>
                 </tr>
             </thead>

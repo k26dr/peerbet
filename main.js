@@ -356,7 +356,7 @@ function updateBids (game_id) {
 
 function spreadPage(id) {
     $("#home-bids-table tbody, #away-bids-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
-    $("#game-score").hide();
+    $("#score-row").hide();
 
     getGame(id).then(function (game) {
         $('.home').html(game.home);
@@ -402,7 +402,7 @@ function spreadPage(id) {
         if (now > locktime) {
             $('.home-score').html(`${game.result.home}`);
             $('.away-score').html(`${game.result.away}`);
-            $('#game-score').show();
+            $('#score-row').show();
         }
     });
     getBets(id).then(function (bets) {

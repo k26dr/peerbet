@@ -12,13 +12,17 @@ var compiled = web3.eth.compile.solidity(source)['<stdin>:PeerBet'];
 
 var abi = compiled.info.abiDefinition;
 var PeerBet = web3.eth.contract(abi);
-
+//var gasEstimate = PeerBet.new.getData({
+//     from: walletAddress, 
+//     data: compiled.code
+//});
+//gasEstimate = web3.eth.estimateGas({ data: gasEstimate });
 
 var peerbet = PeerBet.new(
    {
      from: walletAddress, 
      data: compiled.code,
-     gas: 4600000,
+     gas: 4500000,
      gasPrice: 2.1e10
    }, function (e, contract){
     if (e) console.log(e);

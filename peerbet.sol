@@ -175,9 +175,9 @@ contract PeerBet {
     }
 
     // line is actually 10x the line to allow for half-point spreads
-    function bidSpread(bytes32 game_id, bool home, int32 line) payable returns (int) {
+    function bid(bytes32 game_id, BookType book_type, bool home, int32 line) payable returns (int) {
         Game game = getGameById(game_id);
-        Book book = game.books[uint(BookType.Spread)];
+        Book book = game.books[uint(book_type)];
         Bid memory bid = Bid(msg.sender, msg.value, home, line);
 
         // validate inputs: game status, gametime, line amount
@@ -189,75 +189,21 @@ contract PeerBet {
                 cancelOpenBids(game.books[i]);
             return 2;
         }
-        if (line % 5 != 0)
+        if (book_type == BookType.Spread && line % 5 != 0)
             return 3;
+        else if (book_type == BookType.MoneyLine && line < 100 && line >= -100)
+            return 4;
 
-        Bid memory remainingBid = matchExistingBids(bid, book, home, game_id);
+        Bid memory remainingBid = matchExistingBids(bid, game_id, book_type);
 
         // Use leftover funds to place open bids (maker)
         if (bid.amount > 0) {
             Bid[] bidStack = home ? book.homeBids : book.awayBids;
-            addBidToStack(remainingBid, bidStack, false);
-            BidPlaced(game_id, BookType.Spread, remainingBid.bidder, remainingBid.amount, home, line);
-        }
-
-        return -1;
-    }
-
-    function bidMoneyLine(bytes32 game_id, bool home, int32 line) payable returns (int) {
-        Game game = getGameById(game_id);
-        Book book = game.books[uint(BookType.MoneyLine)];
-        Bid memory bid = Bid(msg.sender, msg.value, home, line);
-
-        // validate inputs: game status, gametime, line amount
-        if (game.status != GameStatus.Open)
-            return 1;
-        if (now > game.locktime) {
-            game.status = GameStatus.Locked;    
-            for (uint i=0; i < 3; i++)
-                cancelOpenBids(game.books[i]);
-            return 2;
-        }
-        if (line < 100 && line >= -100)
-            return 3;
-
-        Bid memory remainingBid = matchExistingBidsMoneyLine(bid, book, home, game_id);
-
-        // Use leftover funds to place open bids (maker)
-        if (bid.amount > 0) {
-            Bid[] bidStack = home ? book.homeBids : book.awayBids;
-            addBidToStack(remainingBid, bidStack, false);
-            BidPlaced(game_id, BookType.MoneyLine, remainingBid.bidder, remainingBid.amount, home, line);
-        }
-
-        return -1;
-    }
-
-    function bidOverUnder(bytes32 game_id, bool over, int32 line) payable returns (int) {
-        Game game = getGameById(game_id);
-        Book book = game.books[uint(BookType.MoneyLine)];
-        Bid memory bid = Bid(msg.sender, msg.value, over, line);
-
-        // validate inputs: game status, gametime, line amount
-        if (game.status != GameStatus.Open)
-            return 1;
-        if (now > game.locktime) {
-            game.status = GameStatus.Locked;    
-            for (uint i=0; i < 3; i++)
-                cancelOpenBids(game.books[i]);
-            return 2;
-        }
-
-        Bid memory remainingBid = matchExistingBidsOverUnder(bid, book, over, game_id);
-
-        // Use leftover funds to place open bids (maker)
-        if (bid.amount > 0) {
-            Bid[] bidStack = over ? book.homeBids : book.awayBids;
-            if (over)
+            if (book_type == BookType.OverUnder && home)
                 addBidToStack(remainingBid, bidStack, true);
             else
                 addBidToStack(remainingBid, bidStack, false);
-            BidPlaced(game_id, BookType.OverUnder, remainingBid.bidder, remainingBid.amount, over, line);
+            BidPlaced(game_id, book_type, remainingBid.bidder, remainingBid.amount, home, line);
         }
 
         return -1;
@@ -404,7 +350,10 @@ contract PeerBet {
         return book;
     }
 
-    function matchExistingBidsMoneyLine(Bid bid, Book storage book, bool home, bytes32 game_id) private returns (Bid) {
+    
+    function matchExistingBids(Bid bid, bytes32 game_id, BookType book_type) private returns (Bid) {
+        Book book = getBook(game_id, book_type);
+        bool home = bid.home;
         Bid[] matchStack = home ?  book.awayBids : book.homeBids;
         int i = int(matchStack.length) - 1;
         while (i >= 0 && bid.amount > 0) {
@@ -413,26 +362,36 @@ contract PeerBet {
                 i--;
                 continue;
             }
-            if (-bid.line < matchStack[j].line)
+            if (book_type == BookType.OverUnder) {
+                if (home && bid.line > matchStack[j].line 
+                || !home && bid.line < matchStack[j].line)
+                break;
+            }
+            else if (-bid.line < matchStack[j].line)
                 break;
 
+            // determined required bet amount to match stack bid
             uint requiredBet;
-            if (matchStack[j].line > 0) {
+            if (book_type == BookType.Spread || book_type == BookType.OverUnder)
+                requiredBet = bid.amount;
+            else if (matchStack[j].line > 0) {
                 requiredBet = matchStack[j].amount * uint(matchStack[j].line) / 100;
             }
             else {
                 requiredBet = bid.amount * 100 / uint(-matchStack[j].line);
             }
-            uint betAmount; 
+
+            // determine bet amounts on both sides
+            uint betAmount;
             uint opposingBetAmount;
             if (bid.amount < requiredBet) {
                 betAmount = bid.amount;
-                if (matchStack[j].line > 0) {
+                if (book_type == BookType.Spread || book_type == BookType.OverUnder)
+                    opposingBetAmount = bid.amount;
+                else if (matchStack[j].line > 0)
                     opposingBetAmount = betAmount * 100 / uint(matchStack[j].line);
-                }
-                else {
+                else
                     opposingBetAmount = bid.amount * uint(-matchStack[j].line) / 100;
-                }
             }
             else {
                 betAmount = requiredBet;
@@ -441,84 +400,23 @@ contract PeerBet {
             bid.amount -= betAmount;
             matchStack[j].amount -= opposingBetAmount;
 
+            int32 myLine;
+            if (book_type == BookType.OverUnder)
+                myLine = matchStack[j].line;
+            else
+                myLine = -matchStack[j].line;
             Bet memory bet = Bet(
                 home ? bid.bidder : matchStack[j].bidder,
                 home ? matchStack[j].bidder : bid.bidder,
                 home ? betAmount : opposingBetAmount,
-                home ? -matchStack[j].line : matchStack[j].line,
+                home ? myLine : matchStack[j].line,
                 BetStatus.Open
             );
             book.bets.push(bet);
-            BetPlaced(game_id, BookType.Spread, bid.bidder, home, betAmount, -matchStack[j].line);
-            BetPlaced(game_id, BookType.Spread, matchStack[j].bidder, !home, opposingBetAmount, matchStack[j].line);
-            i--;
-        }
-        return bid;
-    }
-    
-    function matchExistingBids(Bid bid, Book storage book, bool home, bytes32 game_id) private returns (Bid) {
-        Bid[] matchStack = home ?  book.awayBids : book.homeBids;
-        int i = int(matchStack.length) - 1;
-        while (i >= 0 && bid.amount > 0) {
-            uint j = uint(i);
-            if (matchStack[j].amount == 0) { // deleted bids
-                i--;
-                continue;
-            }
-            if (-bid.line < matchStack[j].line)
-                break;
-
-            address homeAddress = home ? bid.bidder : matchStack[j].bidder;
-            address awayAddress = home ? matchStack[j].bidder : bid.bidder;
-            int32 betLine = home ? -matchStack[j].line : matchStack[j].line;
-            uint betAmount;
-            if (bid.amount < matchStack[j].amount) {
-                betAmount = bid.amount;
-                matchStack[j].amount -= betAmount;
-            }
-            else {
-                betAmount = matchStack[j].amount;
-            }
-            bid.amount -= betAmount;
-
-            Bet memory bet = Bet(homeAddress, awayAddress, betAmount, betLine, BetStatus.Open);
-            book.bets.push(bet);
-            BetPlaced(game_id, BookType.Spread, homeAddress, true, betAmount, betLine);
-            BetPlaced(game_id, BookType.Spread, awayAddress, false, betAmount, -betLine);
-            i--;
-        }
-        return bid;
-    }
-
-    function matchExistingBidsOverUnder(Bid bid, Book storage book, bool over, bytes32 game_id) private returns (Bid) {
-        Bid[] matchStack = over ?  book.awayBids : book.homeBids;
-        int i = int(matchStack.length) - 1;
-        while (i >= 0 && bid.amount > 0) {
-            uint j = uint(i);
-            if (matchStack[j].amount == 0) { // deleted bids
-                i--;
-                continue;
-            }
-            if (over && bid.line > matchStack[j].line || !over && bid.line < matchStack[j].line)
-                break;
-
-            address overAddress = over ? bid.bidder : matchStack[j].bidder;
-            address underAddress = over ? matchStack[j].bidder : bid.bidder;
-            int32 betLine = matchStack[j].line;
-            uint betAmount;
-            if (bid.amount < matchStack[j].amount) {
-                betAmount = bid.amount;
-                matchStack[j].amount -= betAmount;
-            }
-            else {
-                betAmount = matchStack[j].amount;
-            }
-            bid.amount -= betAmount;
-
-            Bet memory bet = Bet(overAddress, underAddress, betAmount, betLine, BetStatus.Open);
-            book.bets.push(bet);
-            BetPlaced(game_id, BookType.Spread, overAddress, true, betAmount, betLine);
-            BetPlaced(game_id, BookType.Spread, underAddress, false, betAmount, betLine);
+            BetPlaced(game_id, BookType.Spread, bid.bidder, 
+                home, betAmount, myLine);
+            BetPlaced(game_id, BookType.Spread, matchStack[j].bidder, 
+                !home, opposingBetAmount, matchStack[j].line);
             i--;
         }
         return bid;

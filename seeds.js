@@ -39,16 +39,16 @@ for (var i=0; i < 100; i++) {
     var random_amount = Math.random() * 100 * 1e17;
     var random_address = Math.random() > 0.5 ? walletAddress : secondAddress;
     var home = Math.random() > 0.5;
-    if (Math.random() > 0.5) {
-        var func = contract.bidSpread;
+    var random_book = Math.floor(Math.random() * 3);
+    if (random_book == 0)
         var random_line = (Math.floor(Math.random() * 40) - 20) * 5; // -100 to 100 by 5s
-    }
-    else {
-        var func = contract.bidMoneyLine;
+    else if (random_book == 1) {
         var random_line = Math.floor(Math.random() * 300) + 100;
         if (Math.random() > 0.5) 
             random_line *= -1;
     }
-    func(active_games[random_index], home, random_line, { from: random_address, value: random_amount , gas: 500000 });
+    else
+        var random_line = Math.floor(Math.random() * 100) + 150
+    contract.bid(active_games[random_index], random_book, home, random_line, { from: random_address, value: random_amount , gas: 500000 });
 }
 

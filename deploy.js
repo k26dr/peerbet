@@ -7,18 +7,18 @@ web3.setProvider(new web3.providers.HttpProvider('http://localhost:8545'));
 var walletAddress = web3.eth.accounts[0];
 web3.personal.unlockAccount(walletAddress, process.argv[2]);
 
-var source = fs.readFileSync("sportsbet.sol", "ascii");
-var compiled = web3.eth.compile.solidity(source)['<stdin>:SportsBet'];
+var source = fs.readFileSync("peerbet.sol", "ascii");
+var compiled = web3.eth.compile.solidity(source)['<stdin>:PeerBet'];
 
 var abi = compiled.info.abiDefinition;
-var SportsBet = web3.eth.contract(abi);
+var PeerBet = web3.eth.contract(abi);
 
 
-var sportsbet = SportsBet.new(
+var peerbet = PeerBet.new(
    {
      from: walletAddress, 
      data: compiled.code,
-     gas: 4000000,
+     gas: 4600000,
      gasPrice: 2.1e10
    }, function (e, contract){
     if (e) console.log(e);

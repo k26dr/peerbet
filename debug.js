@@ -54,7 +54,7 @@ function parseBids(hex) {
             bids.push(parseBid(hex.slice(i, i+114)));
     }
 
-    return bids.filter(bid => bid.amount > 0);
+    return bids;
 }
 
 function watch () {

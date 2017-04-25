@@ -34,15 +34,15 @@ games.forEach(function (game) {
 
 var active_games = games.map(g => contract.getGameId.call(...g));
 
-for (var i=0; i < 100; i++) {
+for (var i=0; i < 200; i++) {
     var random_index = Math.floor(Math.random() * (active_games.length - 1));
     var random_amount = Math.random() * 100 * 1e17;
     var random_address = Math.random() > 0.5 ? walletAddress : secondAddress;
     var home = Math.random() > 0.5;
-    var random_book = Math.floor(Math.random() * 3);
-    if (random_book == 0)
+    var random_book = Math.floor(Math.random() * 3) + 1;
+    if (random_book == 1)
         var random_line = (Math.floor(Math.random() * 40) - 20) * 5; // -100 to 100 by 5s
-    else if (random_book == 1) {
+    else if (random_book == 2) {
         var random_line = Math.floor(Math.random() * 300) + 100;
         if (Math.random() > 0.5) 
             random_line *= -1;

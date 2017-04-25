@@ -2,11 +2,13 @@ pragma solidity ^0.4.9;
 
 contract PeerBet {
     enum GameStatus { Open, Locked, Scored, Verified }
-    enum BookType { Spread, MoneyLine, OverUnder }
+    // BookType.None exists because parsing a log index for a value of 0 
+    // returns all values. It should not be used.
+    enum BookType { None, Spread, MoneyLine, OverUnder }
     enum BetStatus { Open, Paid }
 
     // indexing on a string causes issues with web3, so category has to be an int
-    event GameCreated(bytes32 indexed id, string home, 
+    event GameCreated(bytes32 indexed id, address indexed creator, string home, 
         string away, uint16 indexed category, uint64 locktime);
     event BidPlaced(bytes32 indexed game_id, BookType book, 
         address bidder, uint amount, bool home, int32 line);
@@ -40,10 +42,12 @@ contract PeerBet {
     struct GameResult {
         int home;
         int away;
+        uint timestamp; // when the game was scored
     }
 
     struct Game {
         bytes32 id;
+        address creator;
         string home;
         string away;
         uint16 category;
@@ -57,16 +61,16 @@ contract PeerBet {
     Game[] games;
     mapping(address => uint) public balances;
 
-    function SportsBet() {
+    function PeerBet() {
         owner = msg.sender;
     }
 
 	function createGame (string home, string away, uint16 category, uint64 locktime) returns (int) {
         if (msg.sender != owner) return 1;
         bytes32 id = getGameId(home, away, category, locktime);
-        Game memory game = Game(id, home, away, category, locktime, GameStatus.Open, GameResult(0,0));
+        Game memory game = Game(id, msg.sender, home, away, category, locktime, GameStatus.Open, GameResult(0,0,0));
         games.push(game);
-        GameCreated(id, home, away, category, locktime);
+        GameCreated(id, game.creator, home, away, category, locktime);
         return -1;
     }
     
@@ -89,13 +93,22 @@ contract PeerBet {
         return -1;
     }
 
-    function cancelBets(Book book) private returns (int) {
+    function cancelBets(Book storage book, BookType book_type) private returns (int) {
         for (uint i=0; i < book.bets.length; i++) {
-            Bet memory bet = book.bets[i];
+            Bet bet = book.bets[i];
             if (bet.status == BetStatus.Paid)
                 continue;
+            uint awayBetAmount;
+            if (book_type == BookType.MoneyLine) {
+                if (bet.line < 0)
+                    awayBetAmount = bet.amount * 100 / uint(bet.line);
+                else
+                    awayBetAmount = bet.amount * uint(bet.line) / 100;
+            }
+            else
+                awayBetAmount = bet.amount;
             balances[bet.home] += bet.amount;
-            balances[bet.away] += bet.amount;
+            balances[bet.away] += awayBetAmount;
         }
         delete book.bets;
 
@@ -107,7 +120,7 @@ contract PeerBet {
         for (uint i=0; i < 3; i++) {
             Book book = game.books[i];
             cancelOpenBids(book);
-            cancelBets(book);
+            cancelBets(book, BookType(i));
         }
         for (i=0; i < games.length; i++) {
             if (games[i].id == game_id) {
@@ -119,14 +132,18 @@ contract PeerBet {
         return -1;
     }
 
-    function paySpreadBets(bytes32 game_id) private returns (int) {
+    function payBets(bytes32 game_id) private returns (int) {
         Game game = getGameById(game_id);
 
-        Bet[] bets = game.books[uint(BookType.Spread)].bets;
+        Bet[] spreadBets = game.books[uint(BookType.Spread)].bets;
+        Bet[] moneyLineBets = game.books[uint(BookType.MoneyLine)].bets;
+        Bet[] overUnderBets = game.books[uint(BookType.OverUnder)].bets;
+
+        // Spread
         int resultSpread = game.result.away - game.result.home;
         resultSpread *= 10; // because bet.line is 10x the actual line
-        for (uint i = 0; i < bets.length; i++) {
-            Bet bet = bets[i];
+        for (uint i = 0; i < spreadBets.length; i++) {
+            Bet bet = spreadBets[i];
             if (bet.status == BetStatus.Paid)
                 continue;
             if (resultSpread > bet.line) 
@@ -140,16 +157,51 @@ contract PeerBet {
             bet.status = BetStatus.Paid;
         }
 
+        // MoneyLine
+        bool homeWin = game.result.home > game.result.away;
+        for (i=0; i < moneyLineBets.length; i++) {
+            bet = moneyLineBets[i];
+            if (bet.status == BetStatus.Paid)
+                continue;
+            uint payout = bet.amount;
+            if (bet.line < 0)
+                payout += bet.amount * 100 / uint(bet.line);
+            else
+                payout += bet.amount * uint(bet.line) / 100;
+            if (homeWin)
+                balances[bet.home] += payout;
+            else
+                balances[bet.away] += payout;
+            bet.status = BetStatus.Paid;
+        }
+
+        // OverUnder
+        int totalPoints = game.result.home + game.result.away;
+        for (i=0; i < overUnderBets.length; i++) {
+            bet = overUnderBets[i];
+            if (bet.status == BetStatus.Paid)
+                continue;
+            if (totalPoints > bet.line)
+                balances[bet.home] += bet.amount * 2;
+            else if (totalPoints < bet.line)
+                balances[bet.away] += bet.amount * 2;
+            else {
+                balances[bet.away] += bet.amount;
+                balances[bet.home] += bet.amount;
+            }
+            bet.status = BetStatus.Paid;
+        }
+
         return -1;
     }
 
     function verifyGameResult(bytes32 game_id) returns (int) {
-        if (msg.sender != owner) return 1;
-
         Game game = getGameById(game_id);
+        if (msg.sender != game.creator) return 1;
         if (game.status != GameStatus.Scored) return 2;
+        if (now < game.result.timestamp + 12*3600) return 3; // must wait 12 hours to verify 
 
-        paySpreadBets(game_id);
+        payBets(game_id);
         game.status = GameStatus.Verified;
         GameVerified(game_id);
 
@@ -157,9 +209,8 @@ contract PeerBet {
     }
 
     function setGameResult(bytes32 game_id, int homeScore, int awayScore) returns (int) {
-        if (msg.sender != owner) return 1;
-
         Game game = getGameById(game_id);
+        if (msg.sender != game.creator) return 1;
         if (game.locktime > now) return 2;
         if (game.status == GameStatus.Verified) return 3;
 
@@ -176,6 +227,9 @@ contract PeerBet {
 
     // line is actually 10x the line to allow for half-point spreads
     function bid(bytes32 game_id, BookType book_type, bool home, int32 line) payable returns (int) {
+        if (book_type == BookType.None)
+            return 5;
+
         Game game = getGameById(game_id);
         Book book = game.books[uint(book_type)];
         Bid memory bid = Bid(msg.sender, msg.value, home, line);
@@ -321,7 +375,7 @@ contract PeerBet {
         // count number of bids by bidder
         for (uint i=0; i < nBids; i++) {
             Bid bid = i < book.homeBids.length ? book.homeBids[i] : book.awayBids[i - book.homeBids.length];
-            if (bid.bidder == bidder)
+            if (bid.amount > 0 && bid.bidder == bidder)
                 myBids += 1;
         }
 
@@ -329,7 +383,7 @@ contract PeerBet {
         uint k = 0;
         for (i=0; i < nBids; i++) {
             bid = i < book.homeBids.length ? book.homeBids[i] : book.awayBids[i - book.homeBids.length];
-            if (bid.bidder != bidder) // ignore other people's bids
+            if (bid.bidder != bidder || bid.amount == 0) // ignore other people's bids
                 continue; 
             bytes32 amount = bytes32(bid.amount);
             byte home = bid.home ? byte(1) : byte(0);
@@ -351,6 +405,7 @@ contract PeerBet {
     }
 
     
+    // for over/under bids, the home boolean is equivalent to the over
     function matchExistingBids(Bid bid, bytes32 game_id, BookType book_type) private returns (Bid) {
         Book book = getBook(game_id, book_type);
         bool home = bid.home;
@@ -363,8 +418,8 @@ contract PeerBet {
                 continue;
             }
             if (book_type == BookType.OverUnder) {
-                if (home && bid.line > matchStack[j].line 
-                || !home && bid.line < matchStack[j].line)
+                if (home && bid.line < matchStack[j].line 
+                || !home && bid.line > matchStack[j].line)
                 break;
             }
             else if (-bid.line < matchStack[j].line)
@@ -374,10 +429,10 @@ contract PeerBet {
             uint requiredBet;
             if (book_type == BookType.Spread || book_type == BookType.OverUnder)
                 requiredBet = bid.amount;
-            else if (matchStack[j].line > 0) {
+            else if (matchStack[j].line > 0) { // implied MoneyLine
                 requiredBet = matchStack[j].amount * uint(matchStack[j].line) / 100;
             }
-            else {
+            else { // implied MoneyLine and negative line
                 requiredBet = bid.amount * 100 / uint(-matchStack[j].line);
             }
 
@@ -413,9 +468,9 @@ contract PeerBet {
                 BetStatus.Open
             );
             book.bets.push(bet);
-            BetPlaced(game_id, BookType.Spread, bid.bidder, 
+            BetPlaced(game_id, book_type, bid.bidder, 
                 home, betAmount, myLine);
-            BetPlaced(game_id, BookType.Spread, matchStack[j].bidder, 
+            BetPlaced(game_id, book_type, matchStack[j].bidder, 
                 !home, opposingBetAmount, matchStack[j].line);
             i--;
         }
@@ -478,11 +533,11 @@ contract PeerBet {
         // determine position of new bid in stack
         uint insertIndex = stack.length;
         if (reverse) {
-            while (bid.line >= stack[insertIndex-1].line && insertIndex > 0)
+            while (insertIndex > 0 && bid.line <= stack[insertIndex-1].line)
                 insertIndex--;
         }
         else {
-            while (bid.line <= stack[insertIndex-1].line && insertIndex > 0)
+            while (insertIndex > 0 && bid.line >= stack[insertIndex-1].line)
                 insertIndex--;
         }
         
@@ -499,7 +554,7 @@ contract PeerBet {
         // shift bids down (up to deleted index if one exists)
         if (shiftEndIndex == stack.length)
             stack.length += 1;
-        for (uint i = shiftEndIndex; i > insertIndex; i++) {
+        for (uint i = shiftEndIndex; i > insertIndex; i--) {
             stack[i] = stack[i-1];
         } 
 

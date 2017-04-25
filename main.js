@@ -47,8 +47,16 @@ function route(page, params) {
     $('#view-container').empty().hide();
     switch (page) {
         case 'spread':
-            $("#view-container").html($("#spread").html());
-            spreadPage(params[0]);
+            $("#view-container").html($("#bets-page").html());
+            betsPage(params[0], 1);
+            break;
+        case 'moneyline':
+            $("#view-container").html($("#bets-page").html());
+            betsPage(params[0], 2);
+            break;
+        case 'overunder':
+            $("#view-container").html($("#bets-page").html());
+            betsPage(params[0], 3);
             break;
         case 'admin':
             $("#view-container").html($("#admin").html());
@@ -202,10 +210,10 @@ function addGameToTable (game, categories, table) {
         </td>`;
     }
     else {
-        row += `<td>
-            <a href="#spread_${game.id}">
-                <button class="btn btn-bet">SPREAD</button> 
-            </a>
+        row += `<td class="bets-cell">
+            <a href="#spread_${game.id}"><button class="btn btn-bet">SPREAD</button></a>
+            <a href="#moneyline_${game.id}"><button class="btn btn-bet">MONEY LINE</button></a>
+            <a href="#overunder_${game.id}"><button class="btn btn-bet">OVER UNDER</button></a>
         </td>`;
     }
     row += `</tr>`;
@@ -246,16 +254,20 @@ function getETHtoUSDConversion () {
     });
 }
 
-function getBets(game_id) {
+function getBets(game_id, book) {
     return new Promise(function (resolve, reject) {
         // if cache is set and is for this game
-        if (getBets.prototype.game_id == game_id)
+        if (getBets.prototype.game_id == game_id &&
+            getBets.prototype.book === book)
             resolve(getBets.prototype.bets);
         else {
-            contract.BetPlaced({ game_id: game_id }, { fromBlock: startBlock })
+            contract.BetPlaced({ game_id: game_id, book: book }, { fromBlock: startBlock })
                 .get(function (err, logs) {
                     var bets = logs.map(log => log.args);
+                    if (window.location.hash.split('_')[0] == '#spread')
+                        bets.forEach(bet => bet.line /= 10);
                     getBets.prototype.game_id = game_id;
+                    getBets.prototype.book = book;
                     getBets.prototype.bets = bets;
                     resolve(bets);
                 });
@@ -263,17 +275,21 @@ function getBets(game_id) {
     });
 }
 
-function getMyBets(game_id) {
+function getMyBets(game_id, book) {
     return new Promise(function (resolve, reject) {
         // if cache is set and is for this game
-        if (getMyBets.prototype.game_id == game_id)
+        if (getMyBets.prototype.game_id == game_id &&
+            getMyBets.prototype.book == book)
             resolve(getMyBets.prototype.bets);
         else {
             getWalletAddress().then(function (walletAddress) {
-                contract.BetPlaced({ game_id: game_id, user: walletAddress }, { fromBlock: startBlock })
+                contract.BetPlaced({ game_id: game_id, book: book, user: walletAddress }, { fromBlock: startBlock })
                     .get(function (err, logs) {
                         var bets = logs.map(log => log.args);
+                        if (window.location.hash.split('_')[0] == '#spread')
+                            bets.forEach(bet => bet.line /= 10);
                         getMyBets.prototype.game_id = game_id;
+                        getMyBets.prototype.book = book;
                         getMyBets.prototype.bets = bets;
                         resolve(bets);
                     });
@@ -282,69 +298,55 @@ function getMyBets(game_id) {
     });
 }
 
-
-function getOpenBids(game_id) {
+function getOpenBidsByLine(game_id, book) {
     return new Promise(function (resolve, reject) {
-        // use cache if less than 5 seconds old and is the right game
-        if (getOpenBids.prototype.lastUpdate &&
-            getOpenBids.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
-            getOpenBids.prototype.game_id == game_id)
-            resolve(getOpenBids.prototype.bids);
-        contract.getOpenBids.call(game_id, function (err, hex) {
-            var bids = parseBids(hex);
-            getOpenBids.prototype.bids = bids;
-            getOpenBids.prototype.lastUpdate = new Date();
-            getOpenBids.prototype.game_id = game_id;
-            resolve(bids);
-        });
-    });
-}
-
-function getOpenBidsByLine(game_id) {
-    return new Promise(function (resolve, reject) {
-        // use cache if less than 5 seconds old and is the right game
+        // use cache if less than 5 seconds old and is the right game and book
         if (getOpenBidsByLine.prototype.lastUpdate &&
             getOpenBidsByLine.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
-            getOpenBidsByLine.prototype.game_id == game_id)
+            getOpenBidsByLine.prototype.game_id == game_id &&
+            getOpenBidsByLine.prototype.book == book)
             resolve(getOpenBidsByLine.prototype.bids);
-        contract.getOpenBidsByLine.call(game_id, function (err, hex) {
+        contract.getOpenBidsByLine.call(game_id, book, function (err, hex) {
             var bids = parseBids(hex);
             getOpenBidsByLine.prototype.bids = bids;
             getOpenBidsByLine.prototype.lastUpdate = new Date();
             getOpenBidsByLine.prototype.game_id = game_id;
+            getOpenBidsByLine.prototype.book = book;
             resolve(bids);
         });
     });
 }
 
-function getMyOpenBids(game_id, walletAddress) {
+function getMyOpenBids(game_id, book, walletAddress) {
     return new Promise(function (resolve, reject) {
         // use cache if less than 5 seconds old and is the right game
         if (getMyOpenBids.prototype.lastUpdate &&
             getMyOpenBids.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
-            getMyOpenBids.prototype.game_id == game_id)
+            getMyOpenBids.prototype.game_id == game_id &&
+            getMyOpenBids.prototype.book == book)
             resolve(getMyOpenBids.prototype.bids);
         getWalletAddress().then(function (walletAddress) {
-            contract.getOpenBidsByBidder.call(game_id, walletAddress, function (err, hex) {
+            contract.getOpenBidsByBidder.call(game_id, book, walletAddress, function (err, hex) {
                 var bids = parseBids(hex);
                 getMyOpenBids.prototype.bids = bids;
                 getMyOpenBids.prototype.lastUpdate = new Date();
                 getMyOpenBids.prototype.game_id = game_id;
+                getMyOpenBids.prototype.book = book;
                 resolve(bids);
             });
         });
     });
 }
             
-function updateBids (game_id) {
-    getOpenBidsByLine(game_id).then(function (bids) {
+function updateBids (game_id, book) {
+    getOpenBidsByLine(game_id, book).then(function (bids) {
         $("#home-bids-table tbody, #away-bids-table tbody").empty();
         bids.forEach(bid => {
             if (bid.home) addBidToTable("#home-bids-table", bid);
             else addBidToTable("#away-bids-table", bid);
         });
     });
-    $.when(getGame(game_id), getMyOpenBids(game_id)).then(function (game, bids) {
+    $.when(getGame(game_id), getMyOpenBids(game_id, book)).then(function (game, bids) {
         $("#my-bids-table tbody").empty();
         bids.forEach(bid => {
             bid.team = bid.home ? game.home : game.away;
@@ -354,7 +356,7 @@ function updateBids (game_id) {
 }
     
 
-function spreadPage(id) {
+function betsPage(id, book) {
     $("#home-bids-table tbody, #away-bids-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
     $("#score-row").hide();
 
@@ -405,21 +407,25 @@ function spreadPage(id) {
             $('#score-row').show();
         }
     });
-    getBets(id).then(function (bets) {
+    getBets(id, book).then(function (bets) {
+        console.log(bets);
         $("#view-container #bets-table tbody").empty(); 
         if (bets.length == 0)
             return false;
         bets.filter(bet => bet.home)
             .forEach(bet => addBetToTable("#bets-table", bet));
-        var currentLine = bets.filter(bet => bet.home).reverse()[0].line / 10;
+        var currentLine = bets.filter(bet => bet.home).reverse()[0].line;
         $("#home-line").val(currentLine);
-        $("#away-line").val(-currentLine);
+        if (window.location.hash.split('_')[0] == '#overunder')
+            $("#away-line").val(currentLine);
+        else
+            $("#away-line").val(-currentLine);
     });
-    updateBids(id);
-    var updateBidsInterval = setInterval(() => updateBids(id), 5000);
+    updateBids(id, book);
+    var updateBidsInterval = setInterval(() => updateBids(id, book), 5000);
     global_intervals.push(updateBidsInterval);
 
-    getMyBets(id).then(function (myBets) {
+    getMyBets(id, book).then(function (myBets) {
         myBets.forEach(bet => updateMyBets(bet, id));
     });
 
@@ -436,9 +442,9 @@ function spreadPage(id) {
             var id = window.location.hash.split('_')[1];
             var line = parseFloat($("#home-line").val()) * 10;
             var amount = parseFloat($("#home-amount").val()) * 1e18;
-            contract.bidSpread.estimateGas(id, true, line, function (err, gas) {
+            contract.bid.estimateGas(id, 0, true, line, function (err, gas) {
                 gas = 500000;
-                contract.bidSpread.sendTransaction(id, true, line, 
+                contract.bid(id, 0, true, line, 
                     { from: walletAddress, value: amount , gas: gas }, 
                     function (err, tx_hash) {
                         e.target.disabled = false;
@@ -563,7 +569,10 @@ function updateMyBets (bet, game_id) {
 function addBidToTable (table, bid) {
     var side = bid.home ? "home" : "away";
     var amount = bid.amount / 1e18;
-    var line = bid.line / 10;
+    if (window.location.hash.split('_')[0] == '#spread')
+        var line = bid.line / 10;
+    else 
+        var line = bid.line;
 
     var row = `<tr class="bid">`;
     if (table == "#my-bids-table") {
@@ -581,7 +590,7 @@ function addBidToTable (table, bid) {
 function addBetToTable(table, bet) {
     var row = `<tr class="bet">`;
     var amount = bet.amount / 1e18;
-    var line = bet.line / 10;
+    var line = bet.line;
 
     if (table == "#my-bets-table") {
         row += `<td>${bet.team}</td>`;
@@ -627,7 +636,7 @@ function parseBids(hex) {
             bids.push(parseBid(hex.slice(i, i+114)));
     }
 
-    return bids.filter(bid => bid.amount > 0);
+    return bids;
 }
 
 function adminPage () {

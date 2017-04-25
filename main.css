@@ -98,3 +98,6 @@ h4 {
 .game-score {
     color: blue;
 }
+.bets-cell {
+    text-align: right;
+}

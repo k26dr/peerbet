@@ -62,6 +62,10 @@ function route(page, params) {
             $("#view-container").html($("#admin").html());
             adminPage();
             break;
+        case 'creategame':
+            $("#view-container").html($("#create-game").html());
+            createGamePage();
+            break;
         case 'withdraw':
         case 'profile':
             $("#view-container").html($("#profile").html());
@@ -127,12 +131,13 @@ function getGames () {
         activeGamesPromise.then(game_ids => {
             contract.GameScored({ game_id: game_ids }, { fromBlock: startBlock })
                 .get((err, logs) => {
+                    console.log(err, logs);
                     var scores = logs.map(log => log.args);
                     resolve(scores);
                 });
         });
     });
-    // TODO include scores in games
+
     return new Promise((resolve, reject) => {
         $.when(gamesPromise, scoresPromise).then((games, scores) => {
             var scoresObj = {}
@@ -408,7 +413,6 @@ function betsPage(id, book) {
         }
     });
     getBets(id, book).then(function (bets) {
-        console.log(bets);
         $("#view-container #bets-table tbody").empty(); 
         if (bets.length == 0)
             return false;
@@ -746,4 +750,16 @@ function addWithdrawalToTable(withdrawal) {
         <td class="currency">${amount}</td>
     </tr>`;
     $("#profile-withdrawals-table tbody").append(row);
+}
+
+function createGamePage() {
+    updateTeams('NBA');
+}
+
+function updateTeams(category) {
+    $("#create-game-home, #create-game-away").empty();
+    dictionary.logos[category].sort().forEach(team => {
+        $("#create-game-home, #create-game-away").append(
+            `<option>${team}</option`);
+    });
 }

@@ -58,10 +58,6 @@ function route(page, params) {
             $("#view-container").html($("#bets-page").html());
             betsPage(params[0], 3);
             break;
-        case 'admin':
-            $("#view-container").html($("#admin").html());
-            adminPage();
-            break;
         case 'creategame':
             $("#view-container").html($("#create-game").html());
             createGamePage();
@@ -131,7 +127,6 @@ function getGames () {
         activeGamesPromise.then(game_ids => {
             contract.GameScored({ game_id: game_ids }, { fromBlock: startBlock })
                 .get((err, logs) => {
-                    console.log(err, logs);
                     var scores = logs.map(log => log.args);
                     resolve(scores);
                 });
@@ -171,7 +166,7 @@ function gamesPage() {
         var now = new Date().getTime() / 1000;
         games.filter(game => game.locktime > now)
             .sort((a,b) => a.locktime - b.locktime)
-            .forEach(game => addGameToTable(game, dictionary.categories, "#games-table"));
+            .forEach(game => addGameToTable(game, "#games-table"));
     });
 }
 
@@ -181,13 +176,13 @@ function resultsPage () {
         var now = new Date().getTime() / 1000;
         games.filter(game => game.locktime < now)
             .sort((a,b) => b.locktime - a.locktime)
-            .forEach(game => addGameToTable(game, dictionary.categories, "#results-table"));
+            .forEach(game => addGameToTable(game, "#results-table"));
     });
 }
 
     
-function addGameToTable (game, categories, table) {
-    var category = categories[parseInt(game.category)];
+function addGameToTable (game, table) {
+    var category = dictionary.categories[parseInt(game.category)];
     var gametime = new Date(parseInt(game.locktime) * 1000);
     var date = gametime.toString().slice(0,10);
     var time = gametime.toTimeString().slice(0,5);
@@ -201,26 +196,16 @@ function addGameToTable (game, categories, table) {
             <div class="logo logo-away"></div>
             <span class="away">${game.away}</span>
         </td>`;
-    if (table == "#results-table")
+    if (table == "#results-table" || table == "#my-games-table")
         row += `<td>${game.result.home} - ${game.result.away}</td>`;
     row += ` <td>${category}</td>
         <td>${date}</td>
         <td>${time}</td>`;
-    if (table == '#admin-games-table' && 
-        (game.status > 0 || new Date() > gametime)) {
-        row += `<td>
-            <input type="number" class="score-home" value="${game.result.home}"> -
-            <input type="number" class="score-away" value="${game.result.away}">
-            <button class="score-game">Score</button>
-        </td>`;
-    }
-    else {
-        row += `<td class="bets-cell">
-            <a href="#spread_${game.id}"><button class="btn btn-bet">SPREAD</button></a>
-            <a href="#moneyline_${game.id}"><button class="btn btn-bet">MONEY LINE</button></a>
-            <a href="#overunder_${game.id}"><button class="btn btn-bet">OVER UNDER</button></a>
-        </td>`;
-    }
+    row += `<td class="bets-cell">
+        <a href="#spread_${game.id}"><button class="btn btn-bet">SPREAD</button></a>
+        <a href="#moneyline_${game.id}"><button class="btn btn-bet">MONEY LINE</button></a>
+        <a href="#overunder_${game.id}"><button class="btn btn-bet">OVER UNDER</button></a>
+    </td>`;
     row += `</tr>`;
     $(`#view-container ${table} tbody`).append(row);
     $(`#view-container ${table} tr`).last().data('id', game.id);
@@ -458,9 +443,11 @@ function betsPage(id, book) {
                         var team = $('.home').first().html();
                         if (line > 0)
                             line = '+' + line;
-                        var notice = `Bet placed. Transaction processing. View status 
-                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`;
-                        $("#bet-description-home").html(notice);
+                        var notice = `
+                            <div class="alert alert-success">
+                                Bet placed. Transaction processing. View status <a href="https://etherscan.io/tx/${tx_hash}">here</a>
+                            </div>`;
+                        $("#bet-alerts").append(notice);
                     });
             });
         });
@@ -580,7 +567,10 @@ function addBidToTable (table, bid) {
 
     var row = `<tr class="bid">`;
     if (table == "#my-bids-table") {
-        row += `<td>${bid.team}</td>`;
+        row += `<td>
+            <div class="logo"></div>
+            <span>${bid.team}</span>
+        </td>`;
     }
     row += `<td>${line}</td>
         <td class="currency">${amount}</td>`;
@@ -589,6 +579,12 @@ function addBidToTable (table, bid) {
     }
     row += `</tr>`;
     $(table + " tbody").prepend(row);
+
+    // set logos
+    var logoPos = getLogoPosition(bid.team);
+    $(`#view-container ${table} .logo`).first()
+        .css('background-position-x', logoPos.x)
+        .css('background-position-y', logoPos.y);
 }
 
 function addBetToTable(table, bet) {
@@ -596,17 +592,24 @@ function addBetToTable(table, bet) {
     var amount = bet.amount / 1e18;
     var line = bet.line;
 
-    if (table == "#my-bets-table") {
-        row += `<td>${bet.team}</td>`;
-    }
-    else if (table == "#profile-bets-table") {
-        row += `<td>${bet.date}</td>
-            <td>${bet.team}</td>`;
+    if (table == "#profile-bets-table")
+        row += `<td>${bet.date}</td>`;
+    if (table == "#profile-bets-table" || table == "#my-bets-table") {
+        row += `<td>
+                <div class="logo"></div>
+                <span>${bet.team}</span>
+            </td>`;
     }
     row += `<td>${line}</td>
         <td class="currency">${amount}</td>
     </tr>`;
     $("#view-container " + table + " tbody").prepend(row);
+
+    // set logos
+    var logoPos = getLogoPosition(bet.team);
+    $(`#view-container ${table} .logo`).first()
+        .css('background-position-x', logoPos.x)
+        .css('background-position-y', logoPos.y);
 }
 
 function parseBid(hex) {
@@ -643,51 +646,19 @@ function parseBids(hex) {
     return bids;
 }
 
-function adminPage () {
-    $("#admin-games-table tbody").empty();
-    getGames().then(function (games) {
-        adminPage.prototype.games = games;
-        var game_ids = games.map(game => game.id);
-        games.forEach(game => game.result = { home: '', away: '' });
-        contract.GameScored({ game_id: game_ids }, { fromBlock: startBlock })
-            .get(function (err, logs) {
-                var scores  = logs.map(log => log.args);
-                scores.forEach(function (score) {
-                    var game = games.filter(game => game.id == score.game_id)[0];
-                    game.result.home = score.homeScore;
-                    game.result.away = score.awayScore;
-                });
-                games.forEach(game => addGameToTable(game, 
-                    dictionary.categories, "#admin-games-table"));
-            });
+function scoreGame () {
+    getWalletAddress().then(function (walletAddress) {
+        var inputs = $(e.target).siblings('input');
+        var homeScore = inputs[0].valueAsNumber;
+        var awayScore = inputs[1].valueAsNumber;
+        var game_id = $(e.target).parents("tr").data('id');
+        contract.setGameResult(game_id, homeScore, awayScore, 
+            { from: walletAddress, gas: 1000000 });
+        $("#admin-status").html("Game scored. Transaction sent");
     });
+}
 
-    $('#create-game-submit').on('click', function () {
-        getWalletAddress().then(function (walletAddress) {
-            var home = document.getElementById("create-game-home").value;
-            var away = document.getElementById("create-game-away").value;
-            var category = document.getElementById("create-game-category").valueAsNumber;
-            var offset = new Date().getTimezoneOffset() * 60 * 1000;
-            var locktime = parseInt((document.querySelector("#create-game-locktime").valueAsNumber + offset) / 1000);
-            contract.createGame(home, away, category, locktime, 
-                { from: walletAddress, gas: 400000 }, function (err, tx_hash) {
-                    $("#admin-status").html("Creating game. Transaction sent");
-                    $(".create-game-input").val('');
-                });
-        });
-    });
-
-    $(document).on('click', '.score-game', function (e) {
-        getWalletAddress().then(function (walletAddress) {
-            var inputs = $(e.target).siblings('input');
-            var homeScore = inputs[0].valueAsNumber;
-            var awayScore = inputs[1].valueAsNumber;
-            var game_id = $(e.target).parents("tr").data('id');
-            contract.setGameResult(game_id, homeScore, awayScore, 
-                { from: walletAddress, gas: 1000000 });
-            $("#admin-status").html("Game scored. Transaction sent");
-        });
-    });
+function createGame () {
 }
 
 function profilePage() {
@@ -697,6 +668,11 @@ function profilePage() {
             $("#profile-balance").html(parseFloat(balance / 1e18));
             if (balance == 0)
                 $("#profile-withdraw").hide();
+        });
+        getGames().then(function (games) {
+            $("#my-games-table tbody").empty();
+            games.filter(game => game.creator == walletAddress)
+                .forEach(game => addGameToTable(game, "#my-games-table"));
         });
         contract.BetPlaced({ user: walletAddress }, {  fromBlock: startBlock })
             .get(function (err, logs) {
@@ -754,6 +730,23 @@ function addWithdrawalToTable(withdrawal) {
 
 function createGamePage() {
     updateTeams('NBA');
+    $("#create-game-submit").click(function () {
+        getWalletAddress().then(function (walletAddress) {
+            var home = $("#create-game-home").val();
+            var away = $("#create-game-away").val();
+            var category = parseInt($("#create-game-category").val());
+            var offset = new Date().getTimezoneOffset() * 60 * 1000;
+            var locktime = (document.querySelector("#create-game-locktime").valueAsNumber + offset) / 1000;
+            console.log(locktime);
+            contract.createGame(home, away, category, locktime, 
+                { from: walletAddress, gas: 400000 }, function (err, tx_hash) {
+                    if (err) return false;
+                    $("#create-game-status").html(`Creating game. View status 
+                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`);
+                    $(".create-game-input").val('');
+                });
+        });
+    });
 }
 
 function updateTeams(category) {

@@ -66,7 +66,6 @@ contract PeerBet {
     }
 
 	function createGame (string home, string away, uint16 category, uint64 locktime) returns (int) {
-        if (msg.sender != owner) return 1;
         bytes32 id = getGameId(home, away, category, locktime);
         Game memory game = Game(id, msg.sender, home, away, category, locktime, GameStatus.Open, GameResult(0,0,0));
         games.push(game);
@@ -219,6 +218,7 @@ contract PeerBet {
 
         game.result.home = homeScore;
         game.result.away = awayScore;
+        game.result.timestamp = now;
         game.status = GameStatus.Scored;
         GameScored(game_id, homeScore, awayScore);
 

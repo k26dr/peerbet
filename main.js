@@ -71,6 +71,10 @@ function route(page, params) {
             $("#view-container").html($("#results").html());
             resultsPage();
             break;
+        case 'manage':
+            $("#view-container").html($("#manage-game").html());
+            manageGamePage(params[0]);
+            break;
         case 'games':
         default:
             $("#view-container").html($("#games").html());
@@ -737,7 +741,6 @@ function createGamePage() {
             var category = parseInt($("#create-game-category").val());
             var offset = new Date().getTimezoneOffset() * 60 * 1000;
             var locktime = (document.querySelector("#create-game-locktime").valueAsNumber + offset) / 1000;
-            console.log(locktime);
             contract.createGame(home, away, category, locktime, 
                 { from: walletAddress, gas: 400000 }, function (err, tx_hash) {
                     if (err) return false;
@@ -754,5 +757,50 @@ function updateTeams(category) {
     dictionary.logos[category].sort().forEach(team => {
         $("#create-game-home, #create-game-away").append(
             `<option>${team}</option`);
+    });
+}
+
+function manageGamePage(game_id) {
+    $("#verify-delete-section").hide();
+
+    getGame(game_id).then(function (game) {
+        $("#game-manage-home-score").val(game.result.home);
+        $("#game-manage-away-score").val(game.result.away);
+        if (game.result.home == '-')
+            $("#game-manage-verify-section").show();
+        else
+            $("#game-manage-verify-section").hide();
+    });
+
+    $("#game-manage-score-btn").click(function () {
+        $.when(getWalletAddress(), getGame(game_id))
+            .then(function (walletAddress, game) {
+            // make sure game is scorable
+            var now = new Date.getTime() / 1000;
+            if (game.locktime > now)
+                return false;
+
+            var homeScore = parseInt($("#game-manage-home-score").val());
+            var awayScore = parseInt($("#game-manage-away-score").val());
+            if (homeScore == '' || awayScore == '')
+                return false;
+            contract.setGameResult(game_id, homeScore, awayScore,
+                { from: walletAddress, gas: 400000 }, function (err, tx_hash) {
+                    console.log(err, tx_hash);
+                });
+        });
+    });
+
+    $("#initial-delete-btn").click(function () {
+        $("#verify-delete-section").show();
+    });
+
+    $("#permanent-delete").click(function () {
+        if ($("#verify-delete-text").val() != "DELETE")
+            return false;
+        contract.deleteGame(game_id, { from: walletAddress, gas: 600000 }, 
+            function (err, tx_hash) {
+                console.log(err, tx_hash);
+            });
     });
 }

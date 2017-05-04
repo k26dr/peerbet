@@ -14,7 +14,7 @@ contract PeerBet {
         address bidder, uint amount, bool home, int32 line);
     event BetPlaced(bytes32 indexed game_id, BookType indexed book, 
         address indexed user, bool home, uint amount, int32 line);
-    event GameScored(bytes32 indexed game_id, int homeScore, int awayScore);
+    event GameScored(bytes32 indexed game_id, int homeScore, int awayScore, uint timestamp);
     event GameVerified(bytes32 indexed game_id);
     event Withdrawal(address indexed user, uint amount, uint timestamp);
 
@@ -116,6 +116,8 @@ contract PeerBet {
 
     function deleteGame(bytes32 game_id) returns (int) {
         Game game = getGameById(game_id);
+        if (msg.sender != game.creator && (game.locktime + 86400*4) > now) return 1;
+
         for (uint i=0; i < 3; i++) {
             Book book = game.books[i];
             cancelOpenBids(book);
@@ -220,7 +222,7 @@ contract PeerBet {
         game.result.away = awayScore;
         game.result.timestamp = now;
         game.status = GameStatus.Scored;
-        GameScored(game_id, homeScore, awayScore);
+        GameScored(game_id, homeScore, awayScore, now);
 
         return -1;
     }
@@ -294,107 +296,6 @@ contract PeerBet {
 
         return s;
     }
-
-    // Unfortunately this function had too many local variables, so a 
-    // bunch of unruly code had to be used to eliminate some variables
-    function getOpenBidsByLine(bytes32 game_id, BookType book_type) constant returns (bytes) {
-        Book book = getBook(game_id, book_type);
-
-        uint away_lines_length = getUniqueLineCount(book.awayBids);
-        uint home_lines_length = getUniqueLineCount(book.homeBids);
-
-        // group bid amounts by line
-        mapping(int32 => uint)[2] line_amounts;
-        int32[] memory away_lines = new int32[](away_lines_length);
-        int32[] memory home_lines = new int32[](home_lines_length);
-
-        uint k = 0;
-        for (uint i=0; i < book.homeBids.length; i++) {
-            Bid bid = book.homeBids[i]; 
-            if (bid.amount == 0) // ignore deleted bids
-                continue;
-            if (line_amounts[0][bid.line] == 0) {
-                home_lines[k] = bid.line;
-                k++;
-            }
-            line_amounts[0][bid.line] += bid.amount;
-        }
-        k = 0;
-        for (i=0; i < book.awayBids.length; i++) {
-            bid = book.awayBids[i]; 
-            if (bid.amount == 0) // ignore deleted bids
-                continue;
-            if (line_amounts[1][bid.line] == 0) {
-                away_lines[k] = bid.line;
-                k++;
-            }
-            line_amounts[1][bid.line] += bid.amount;
-        }
-
-        bytes memory s = new bytes(37 * (home_lines_length + away_lines_length));
-        k = 0;
-        for (i=0; i < home_lines_length; i++) {
-            //bytes4 line = bytes4(home_lines[i]);
-            bytes32 amount = bytes32(line_amounts[0][home_lines[i]]);
-            for (uint j=0; j < 32; j++) { s[k] = amount[j]; k++; }
-            s[k] = byte(1); k++;
-            for (j=0; j < 4; j++) { s[k] = bytes4(home_lines[i])[j]; k++; }
-        }
-        for (i=0; i < away_lines_length; i++) {
-            //line = bytes4(away_lines[i]);
-            amount = bytes32(line_amounts[1][away_lines[i]]);
-            for (j=0; j < 32; j++) { s[k] = amount[j]; k++; }
-            s[k] = byte(0); k++;
-            for (j=0; j < 4; j++) { s[k] = bytes4(away_lines[i])[j]; k++; }
-        }
-        
-        return s;
-    }
-
-    function getUniqueLineCount(Bid[] stack) private constant returns (uint) {
-        uint line_count = 0;
-        int lastIndex = -1;
-        for (uint i=0; i < stack.length; i++) {
-            if (stack[i].amount == 0) // ignore deleted bids
-                continue;
-            if (lastIndex == -1)
-                line_count++;
-            else if (stack[i].line != stack[uint(lastIndex)].line)
-                line_count++;
-            lastIndex = int(i);
-        }
-        return line_count;
-    }
-
-    function getOpenBidsByBidder(bytes32 game_id, BookType book_type, address bidder) constant returns (bytes) {
-        Book book = getBook(game_id, book_type);
-        uint nBids = book.homeBids.length + book.awayBids.length;
-        uint myBids = 0;
-
-        // count number of bids by bidder
-        for (uint i=0; i < nBids; i++) {
-            Bid bid = i < book.homeBids.length ? book.homeBids[i] : book.awayBids[i - book.homeBids.length];
-            if (bid.amount > 0 && bid.bidder == bidder)
-                myBids += 1;
-        }
-
-        bytes memory s = new bytes(37 * myBids);
-        uint k = 0;
-        for (i=0; i < nBids; i++) {
-            bid = i < book.homeBids.length ? book.homeBids[i] : book.awayBids[i - book.homeBids.length];
-            if (bid.bidder != bidder || bid.amount == 0) // ignore other people's bids
-                continue; 
-            bytes32 amount = bytes32(bid.amount);
-            byte home = bid.home ? byte(1) : byte(0);
-            bytes4 line = bytes4(bid.line);
-
-            for (uint j=0; j < 32; j++) { s[k] = amount[j]; k++; }
-            s[k] = home; k++;
-            for (j=0; j < 4; j++) { s[k] = line[j]; k++; }
-        }
-        return s;
-    }
-        
 
     // for functions throwing a stack too deep error, this helper will free up 2 local variable spots
     function getBook(bytes32 game_id, BookType book_type) constant private returns (Book storage) {
@@ -495,20 +396,22 @@ contract PeerBet {
         if (msg.sender == owner) selfdestruct(owner);
     }
 
-    function getGameId (string home, string away, uint16 category, uint64 locktime) constant returns (bytes32) {
+    function getGameId (address creator, string home, string away, uint16 category, uint64 locktime) constant returns (bytes32) {
         uint i = 0;
         bytes memory a = bytes(home);
         bytes memory b = bytes(away);
         bytes2 c = bytes2(category);
         bytes8 d = bytes8(locktime);
+        bytes memory e = bytes(creator);
 
-        uint length = a.length + b.length + c.length + d.length;
+        uint length = a.length + b.length + c.length + d.length + e.length;
         bytes memory toHash = new bytes(length);
         uint k = 0;
         for (i = 0; i < a.length; i++) { toHash[k] = a[i]; k++; }
         for (i = 0; i < b.length; i++) { toHash[k] = b[i]; k++; }
         for (i = 0; i < c.length; i++) { toHash[k] = c[i]; k++; }
         for (i = 0; i < d.length; i++) { toHash[k] = d[i]; k++; }
+        for (i = 0; i < e.length; i++) { toHash[k] = e[i]; k++; }
         return keccak256(toHash);
         
     }

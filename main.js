@@ -101,7 +101,6 @@ function getWalletAddress () {
                 else {
                     // cache then resolve
                     var account = accounts[accounts.length - 1];
-                    console.log(account);
                     sessionStorage.walletAddress = account;
                     resolve(account);
                 }
@@ -148,7 +147,8 @@ function getGames () {
                 if (scoresObj[game.id]) {
                     game.result = { 
                         home: scoresObj[game.id].homeScore, 
-                        away: scoresObj[game.id].awayScore
+                        away: scoresObj[game.id].awayScore,
+                        timestamp: parseInt(scoresObj[game.id].timestamp)
                     }
                 }
                 else
@@ -299,60 +299,52 @@ function getMyBets(game_id, book) {
     });
 }
 
-function getOpenBidsByLine(game_id, book) {
+function getOpenBids(game_id, book) {
     return new Promise(function (resolve, reject) {
         // use cache if less than 5 seconds old and is the right game and book
-        if (getOpenBidsByLine.prototype.lastUpdate &&
-            getOpenBidsByLine.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
-            getOpenBidsByLine.prototype.game_id == game_id &&
-            getOpenBidsByLine.prototype.book == book)
-            resolve(getOpenBidsByLine.prototype.bids);
-        contract.getOpenBidsByLine.call(game_id, book, function (err, hex) {
+        if (getOpenBids.prototype.lastUpdate &&
+            getOpenBids.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
+            getOpenBids.prototype.game_id == game_id &&
+            getOpenBids.prototype.book == book)
+            resolve(getOpenBids.prototype.bids);
+        contract.getOpenBids.call(game_id, book, function (err, hex) {
             var bids = parseBids(hex);
-            getOpenBidsByLine.prototype.bids = bids;
-            getOpenBidsByLine.prototype.lastUpdate = new Date();
-            getOpenBidsByLine.prototype.game_id = game_id;
-            getOpenBidsByLine.prototype.book = book;
+            getOpenBids.prototype.bids = bids;
+            getOpenBids.prototype.lastUpdate = new Date();
+            getOpenBids.prototype.game_id = game_id;
+            getOpenBids.prototype.book = book;
             resolve(bids);
         });
     });
 }
 
-function getMyOpenBids(game_id, book, walletAddress) {
-    return new Promise(function (resolve, reject) {
-        // use cache if less than 5 seconds old and is the right game
-        if (getMyOpenBids.prototype.lastUpdate &&
-            getMyOpenBids.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
-            getMyOpenBids.prototype.game_id == game_id &&
-            getMyOpenBids.prototype.book == book)
-            resolve(getMyOpenBids.prototype.bids);
-        getWalletAddress().then(function (walletAddress) {
-            contract.getOpenBidsByBidder.call(game_id, book, walletAddress, function (err, hex) {
-                var bids = parseBids(hex);
-                getMyOpenBids.prototype.bids = bids;
-                getMyOpenBids.prototype.lastUpdate = new Date();
-                getMyOpenBids.prototype.game_id = game_id;
-                getMyOpenBids.prototype.book = book;
-                resolve(bids);
-            });
-        });
+function groupBidsByLine (bids) {
+    var lines = { home: {}, away: {} };
+    bids.forEach(bid => {
+        var side = bid.home ? "home" : "away";
+        if (lines[side][bid.line])
+            lines[side][bid.line] += bid.amount;
+        else
+            lines[side][bid.line] = bid.amount;
     });
+    return lines;
 }
             
+            
 function updateBids (game_id, book) {
-    getOpenBidsByLine(game_id, book).then(function (bids) {
-        $("#home-bids-table tbody, #away-bids-table tbody").empty();
-        bids.forEach(bid => {
-            if (bid.home) addBidToTable("#home-bids-table", bid);
-            else addBidToTable("#away-bids-table", bid);
-        });
-    });
-    $.when(getGame(game_id), getMyOpenBids(game_id, book)).then(function (game, bids) {
-        $("#my-bids-table tbody").empty();
-        bids.forEach(bid => {
+    $.when(getOpenBids(game_id, book), getWalletAddress(), getGame(game_id))
+    .then(function (bids, walletAddress, game) {
+        $("#home-bids-table tbody, #away-bids-table tbody, #my-bids-table tbody").empty();
+        var lines = groupBidsByLine(bids);
+        $.each(lines.home, (line, amount) => 
+            addBidToTable("#home-bids-table", { line: line, amount: amount }));
+        $.each(lines.away, (line, amount) => 
+            addBidToTable("#away-bids-table", { line: line, amount: amount }));
+        bids.filter(bid => bid.bidder == walletAddress).forEach(bid => {
             bid.team = bid.home ? game.home : game.away;
             addBidToTable("#my-bids-table", bid);
         });
+        
     });
 }
     
@@ -360,11 +352,19 @@ function updateBids (game_id, book) {
 function betsPage(id, book) {
     $("#home-bids-table tbody, #away-bids-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
     $("#bet-alerts").empty();
-    $("#score-row").hide();
+    $("#view-container #score-row").hide();
 
     getGame(id).then(function (game) {
-        $('.home').html(game.home);
-        $('.away').html(game.away);
+        if (pageBookType() == 3) {
+            $('.home').html("Over");
+            $('.away').html("Under");
+            $('h1 .home').html(game.home);
+            $('h1 .away').html(game.away);
+        }
+        else {
+            $('.home').html(game.home);
+            $('.away').html(game.away);
+        }
 
         // display logos
         var homePos = getLogoPosition(game.home);
@@ -462,8 +462,9 @@ function betsPage(id, book) {
                     if (line > 0)
                         line = '+' + line;
                     amount = amount / 1e18;
-                    var notice = `Bet for ${amount} ETH placed at ${team} (${line})`;
-                    pageAlert(tx, notice, "#bet-alerts");
+                    var notice = `Bid for ${amount} ETH initiated at ${team} (${line}). 
+                        This page will update when the bid clears.`;
+                    txAlert(tx, notice, "#bet-alerts");
                     $(`#bet-description-${side}`).html('');
                 });
         });
@@ -483,7 +484,7 @@ function betsPage(id, book) {
             contract.cancelBid(game_id, book, line, home, 
                 { from: walletAddress, gas: 200000 }, function (err, tx) {
                     if (err) return false;
-                    pageAlert(tx, "Bid cancelation submitted.", "#bet-alerts");
+                    txAlert(tx, "Bid cancelation submitted.", "#bet-alerts");
                 });
         });
     });
@@ -536,10 +537,10 @@ function pageGameId() {
     return window.location.hash.split('_')[1];
 }
 
-function pageAlert (tx, text, selector) {
+function txAlert (tx, text, selector) {
     var notice = `
         <div class="alert alert-success alert-dismissable">
-            ${text}. View status <a class="alert-link" href="${txLink(tx)}">here</a>.
+            ${text} View status <a class="alert-link" href="${txLink(tx)}">here</a>.
             <a class="close" data-dismiss="alert" aria-label="close">&times;</a>
         </div>`;
     $(`#view-container ${selector}`).append(notice);
@@ -564,13 +565,15 @@ function updateMyBets (bet, game_id) {
             .forEach(line => addBetToTable("#my-bets-table", { 
                 team: game.home, 
                 line: line, 
-                amount: updateMyBets.prototype.lines.home[line] 
+                amount: updateMyBets.prototype.lines.home[line],
+                home: true
             }));
         Object.keys(updateMyBets.prototype.lines.away)
             .forEach(line => addBetToTable("#my-bets-table", { 
                 team: game.away, 
                 line: line, 
-                amount: updateMyBets.prototype.lines.away[line] 
+                amount: updateMyBets.prototype.lines.away[line],
+                home: false
             }));
     });
 }
@@ -585,10 +588,15 @@ function addBidToTable (table, bid) {
 
     var row = `<tr class="bid">`;
     if (table == "#my-bids-table") {
-        row += `<td>
-            <div class="logo"></div>
-            <span>${bid.team}</span>
-        </td>`;
+        if (pageBookType() == 3) {
+            var side = bid.home ? "Over" : "Under";
+            row += `<td>${side}</td>`;
+        }
+        else
+            row += `<td>
+                <div class="logo"></div>
+                <span>${bid.team}</span>
+            </td>`;
     }
     row += `<td>${line}</td>
         <td class="currency">${amount}</td>`;
@@ -610,13 +618,15 @@ function addBetToTable(table, bet) {
     var amount = bet.amount / 1e18;
     var line = bet.line;
 
-    if (table == "#profile-bets-table")
-        row += `<td>${bet.date}</td>`;
-    if (table == "#profile-bets-table" || table == "#my-bets-table") {
-        row += `<td>
-                <div class="logo"></div>
-                <span>${bet.team}</span>
-            </td>`;
+    if (table == "#my-bets-table") {
+        row += `<td>`;
+        if (pageBookType() == 1 || pageBookType() == 2) {
+            row += `<div class="logo"></div>`;
+            row += `<span>${bet.team}</span>`;
+        }
+        else if (pageBookType() == 3)
+            row += bet.home ? "Over" : "Under";
+        row += `</td>`;
     }
     row += `<td>${line}</td>
         <td class="currency">${amount}</td>
@@ -677,24 +687,6 @@ function profilePage() {
             games.filter(game => game.creator == walletAddress)
                 .forEach(game => addGameToTable(game, "#my-games-table"));
         });
-        contract.BetPlaced({ user: walletAddress }, {  fromBlock: startBlock })
-            .get(function (err, logs) {
-                var bets = logs.map(log => log.args);
-                var games = {}
-                bets.forEach(bet => games[bet.game_id] = {});
-                var game_ids = bets.forEach(bet => bet.game_id);
-                contract.GameCreated({ id: game_ids }, { fromBlock: startBlock })
-                .get(function (err, logs) {
-                    logs.forEach(log => games[log.args.id] = log.args);
-                    $("#profile-bets-table tbody").empty();
-                    bets.forEach(bet => {
-                        var game = games[bet.game_id];
-                        bet.team = bet.home ? game.home : game.away;
-                        bet.date = new Date(game.locktime * 1000).toLocaleDateString();
-                        addBetToTable("#profile-bets-table", bet);
-                    });
-                });
-            });
         contract.Withdrawal({ user: walletAddress }, { fromBlock: startBlock })
             .get(function (err, logs) {
                 var withdrawals = logs.map(log => log.args);
@@ -711,7 +703,7 @@ function profilePage() {
                             e.target.disabled = false;
                             return false;
                         }
-                        pageAlert(tx, "Withdrawal initiated.", "#profile-alerts");
+                        txAlert(tx, "Withdrawal initiated.", "#profile-alerts");
                     });
             });
         });
@@ -742,8 +734,7 @@ function createGamePage() {
             contract.createGame(home, away, category, locktime, 
                 { from: walletAddress, gas: 400000, gasPrice: GAS_PRICE }, function (err, tx) {
                     if (err) return false;
-                    $("#create-game-status").html(`Creating game. View status 
-                            <a href="${txLink(tx)}">here</a>`);
+                    txAlert(tx, "Creating game.", "#create-game-alerts");
                     $(".create-game-input").val('');
                 });
         });
@@ -752,7 +743,7 @@ function createGamePage() {
 
 function updateTeams(category) {
     $("#create-game-home, #create-game-away").empty();
-    dictionary.logos[category].sort().forEach(team => {
+    dictionary.logos[category].concat().sort().forEach(team => {
         $("#create-game-home, #create-game-away").append(
             `<option>${team}</option`);
     });
@@ -773,10 +764,35 @@ function manageGamePage(game_id) {
         $("#game-manage-away-score").val(game.result.away);
         $(".away").html(game.away);
         $(".home").html(game.home);
+
+        var ms = 1000 * (game.result.timestamp + 12*3600);
+        var verifyTime = new Date(ms);
+
         if (game.result.home == '-')
             $("#game-manage-verify-section").hide();
-        else
+        else {
             $("#game-manage-verify-section").show();
+            var timeString = `${verifyTime.toLocaleDateString()} ${verifyTime.toLocaleTimeString()}`;
+        }
+        
+        // wait 12 hours to activate verify button
+        var now = new Date();
+        var notice = `Verifying a score pays out all bets associated with a game.`
+        if (verifyTime > now) {
+            document.getElementById('verify-score').disabled = true;
+            notice += ` The current score cannot be verified until ${timeString}`;
+        }
+        $("#game-manage-verify-status").html(notice);
+
+        // set logos
+        var homePos = getLogoPosition(game.home);
+        var awayPos = getLogoPosition(game.away);
+        $(`#view-container .logo-home`)
+            .css('background-position-x', homePos.x)
+            .css('background-position-y', homePos.y);
+        $(`#view-container .logo-away`)
+            .css('background-position-x', awayPos.x)
+            .css('background-position-y', awayPos.y);
     });
 
     $("#game-manage-score-btn").click(function () {
@@ -796,10 +812,10 @@ function manageGamePage(game_id) {
             if (homeScore == '' || awayScore == '')
                 return false;
             contract.setGameResult(game_id, homeScore, awayScore,
-                { from: walletAddress, gas: 400000 }, function (err, tx) {
-                    $("#game-manage-score-status").html(`Score submitted. 
-                        View status <a href="${txLink(tx)}">here</a>`).show();
-                });
+            { from: walletAddress, gas: 400000 }, function (err, tx) {
+                var notice = "Score submitted. Scores must still be verified before bets are paid out."        
+                txAlert(tx, notice, "#game-manage-alerts");
+            });
         });
     });
 
@@ -807,7 +823,7 @@ function manageGamePage(game_id) {
         getWalletAddress().then(function (walletAddress) {
             if ($("#verify-delete-text").val() != "DELETE")
                 return false;
-            contract.deleteGame(game_id, { from: walletAddress, gas: 600000 }, 
+            contract.deleteGame(game_id, { from: walletAddress, gas: 1000000 }, 
                 function (err, tx) {
                     $("#game-manage-delete-status")
                         .html(`Deleting Game Permanently. 

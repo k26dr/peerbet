@@ -103,3 +103,6 @@ h4 {
 .bets-cell {
     text-align: right;
 }
+#bet-alerts {
+    margin-top: 10px;
+}

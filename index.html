@@ -98,12 +98,12 @@
         <span class="logo logo-away"></span>
     </h1>
 
+    <div id="bet-alerts"></div>
+
     <div>
         Gametime: <span class="locktime"></span> - 
         <span class="game-status">Betting locks 10 min prior to gametime</span>
     </div>
-
-    <div id="bet-alerts"></div>
 
     <div id="score-row">
         Final Score: 
@@ -245,7 +245,7 @@
 <section class="page" id="profile">
     <h3>Profile</h1>
         
-    <div id="profile-status"></div>
+    <div id="profile-alerts"></div>
 
     <table class="table">
         <tr>
@@ -324,7 +324,7 @@
 <section class="page" id="create-game">
     <h1>Create New Game</h1>
 
-    <div id="create-game-status"></div>
+    <div class="alert alert-info" id="create-game-status"></div>
 
     <div class="row">
         <div class="col-md-6">
@@ -364,9 +364,14 @@
 </section>
 
 <section class="page" id="manage-game">
-    <h1>Score Game</h1>
+    <h3>Betting Pages</h3>
+    <div id="game-manage-betting-links"></div>
+
+    <hr>
 
     <div id="game-manage-score-section">
+        <h3>Score Game</h3>
+        <div class="alert alert-info" id="game-manage-score-status"></div>
         <div class="row">
             <div class="col-md-6">
                 <div class="form-group">
@@ -381,22 +386,33 @@
                 </div>
             </div>
         </div>
-        <button id="game-manage-score-btn" class="btn btn-default">Score Game</button>
+        <button id="game-manage-score-btn" class="btn btn-primary">Score Game</button>
     </div>
+
+    <hr>
 
     <div id="game-manage-verify-section">
-        <h1>Verify Score</h1>
+        <h3>Verify Score</h3>
+        <div class="alert alert-info" id="game-manage-verify-status">
+            Verifying a score pays out all bets associated with a game. 
+            Scores cannot be verified for 12 hours after submission.
+        </div>
         <button class="btn btn-success">Verify Score</button>
+        <hr>
     </div>
 
-    <h1>Delete Game</h1>
-    <button id="initial-delete-btn" class="btn btn-danger">Delete Game</button>
-    <div id="verify-delete-section">
-        <div>WARNING: Deleting a game will permanently cancel all unpaid bets 
-            and bids for a game. Type DELETE if you are sure you want to delete
-            this game</div>
+
+    <h3>Delete Game</h3>
+    <div id="game-manage-delete-status" class="alert alert-danger">
+        WARNING: Deleting a game will permanently cancel all unpaid bets 
+        and bids for a game. Type DELETE if you are sure you want to delete
+        this game
+    </div>
+    <div class="form-group">
         <input class="form-control" id="verify-delete-text">
-        <button class="btn btn-danger" id="permanent-delete">Delete Permanently</button>
+    </div>
+    <div class="form-group">
+        <button id="delete-game-btn" class="btn btn-danger">Delete Permanently</button>
     </div>
 
 </section>

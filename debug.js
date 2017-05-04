@@ -4,12 +4,14 @@ var fs = require('fs');
 
 web3.setProvider(new web3.providers.HttpProvider('http://localhost:8545'));
 
-var abi = JSON.parse(fs.readFileSync("abi.json", "ascii"));
+var abi = JSON.parse(fs.readFileSync("bin/peerbet.sol:PeerBet.abi", "ascii"));
 var contractAddress = fs.readFileSync("contract_address", "ascii");
 var contract = web3.eth.contract(abi).at(contractAddress);
+
 var walletAddress = web3.eth.accounts[0];
 var secondAddress = web3.eth.accounts[1];
 web3.personal.unlockAccount(walletAddress, process.argv[2]);
+web3.personal.unlockAccount(secondAddress, process.argv[2]);
 
 var tx = {
     from: walletAddress, 

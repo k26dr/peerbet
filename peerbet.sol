@@ -276,9 +276,8 @@ contract PeerBet {
         bytes memory s = new bytes(57 * nBids);
         uint k = 0;
         for (uint i=0; i < nBids; i++) {
-            Bid bid;
             if (i < book.homeBids.length)
-                bid = book.homeBids[i];
+                Bid bid = book.homeBids[i];
             else
                 bid = book.awayBids[i - book.homeBids.length];
             bytes20 bidder = bytes20(bid.bidder);
@@ -428,7 +427,7 @@ contract PeerBet {
             // determined required bet amount to match stack bid
             uint requiredBet;
             if (book_type == BookType.Spread || book_type == BookType.OverUnder)
-                requiredBet = bid.amount;
+                requiredBet = bid.amount < matchStack[j].amount ? bid.amount : matchStack[j].amount;
             else if (matchStack[j].line > 0) { // implied MoneyLine
                 requiredBet = matchStack[j].amount * uint(matchStack[j].line) / 100;
             }
@@ -468,8 +467,7 @@ contract PeerBet {
                 BetStatus.Open
             );
             book.bets.push(bet);
-            BetPlaced(game_id, book_type, bid.bidder, 
-                home, betAmount, myLine);
+            BetPlaced(game_id, book_type, bid.bidder, home, betAmount, myLine);
             BetPlaced(game_id, book_type, matchStack[j].bidder, 
                 !home, opposingBetAmount, matchStack[j].line);
             i--;
@@ -477,21 +475,20 @@ contract PeerBet {
         return bid;
     }
 
-    function cancelBid(address bidder, bytes32 game_id, int32 line, bool home) returns (bool) {
-        Game game = getGameById(game_id);
-        Book book = game.books[uint(BookType.Spread)];
+    function cancelBid(bytes32 game_id, BookType book_type, int32 line, bool home) returns (int) {
+        Book book = getBook(game_id, book_type);
         Bid[] stack = home ? book.homeBids : book.awayBids;
+        address bidder = msg.sender;
 
         // Delete bid in stack, refund amount to user
-        bool found = false;
         for (uint i=0; i < stack.length; i++) {
-            if (stack[i].bidder == bidder && stack[i].line == line) {
+            if (stack[i].amount > 0 && stack[i].bidder == bidder && stack[i].line == line) {
                 balances[bidder] += stack[i].amount;
                 delete stack[i];
-                found = true;
+                return -1;
             }
         }
-        return found;
+        return 1;
     }
 
     function kill () {
@@ -564,7 +561,7 @@ contract PeerBet {
         return -1;
     }
 
-    function getGameById(bytes32 game_id) private returns (Game storage) {
+    function getGameById(bytes32 game_id) constant private returns (Game storage) {
         bool game_exists = false;
         for (uint i = 0; i < games.length; i++) {
             if (games[i].id == game_id) {

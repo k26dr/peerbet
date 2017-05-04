@@ -1,7 +1,8 @@
 var docReady = $.Deferred();
 $(docReady.resolve);
 
-var abiPromise = $.get("abi.json");
+var GAS_PRICE = 2e10;
+var abiPromise = $.get("bin/peerbet.sol:PeerBet.abi");
 var contractAddressPromise = $.get("contract_address");
 var dictionaryPromise = $.get("data_dictionary.json");
 var startBlockPromise = $.get("start_block");
@@ -22,7 +23,7 @@ var web3Promise = new Promise(function (resolve, reject) {
 $.when(contractAddressPromise, abiPromise, dictionaryPromise, startBlockPromise, docReady, web3Promise)
     .always(function (contractAddress, abiJSON, dictionary, startBlock) {
     var contractAddress = contractAddress[0];
-    var abi = abiJSON[0];
+    var abi = JSON.parse(abiJSON[0]);
     window.dictionary = dictionary[0];
     window.startBlock = startBlock[0];
     contract = web3.eth.contract(abi).at(contractAddress);
@@ -95,12 +96,14 @@ function getWalletAddress () {
         else if (sessionStorage.walletAddress)
             resolve(sessionStorage.walletAddress);
         else if (typeof mist !== 'undefined') {
-            mist.requestAccount(function (err, walletAddress) {
+            mist.requestAccount(function (err, accounts) {
                 if (err) reject(err);
                 else {
                     // cache then resolve
-                    sessionStorage.walletAddress = walletAddress[0];
-                    resolve(walletAddress[0]);
+                    var account = accounts[accounts.length - 1];
+                    console.log(account);
+                    sessionStorage.walletAddress = account;
+                    resolve(account);
                 }
             })
         }
@@ -205,11 +208,15 @@ function addGameToTable (game, table) {
     row += ` <td>${category}</td>
         <td>${date}</td>
         <td>${time}</td>`;
-    row += `<td class="bets-cell">
-        <a href="#spread_${game.id}"><button class="btn btn-bet">SPREAD</button></a>
-        <a href="#moneyline_${game.id}"><button class="btn btn-bet">MONEY LINE</button></a>
-        <a href="#overunder_${game.id}"><button class="btn btn-bet">OVER UNDER</button></a>
-    </td>`;
+    if (table == "#my-games-table")
+        row += `<td><a href="#manage_${game.id}"><button class="btn btn-bet">MANAGE</button></a></td>`;
+    else {
+        row += `<td class="bets-cell">
+            <a href="#spread_${game.id}"><button class="btn btn-bet">SPREAD</button></a>
+            <a href="#moneyline_${game.id}"><button class="btn btn-bet">MONEY LINE</button></a>
+            <a href="#overunder_${game.id}"><button class="btn btn-bet">OVER UNDER</button></a>
+        </td>`;
+    }
     row += `</tr>`;
     $(`#view-container ${table} tbody`).append(row);
     $(`#view-container ${table} tr`).last().data('id', game.id);
@@ -258,7 +265,7 @@ function getBets(game_id, book) {
             contract.BetPlaced({ game_id: game_id, book: book }, { fromBlock: startBlock })
                 .get(function (err, logs) {
                     var bets = logs.map(log => log.args);
-                    if (window.location.hash.split('_')[0] == '#spread')
+                    if (pageBookType() == 1)
                         bets.forEach(bet => bet.line /= 10);
                     getBets.prototype.game_id = game_id;
                     getBets.prototype.book = book;
@@ -280,7 +287,7 @@ function getMyBets(game_id, book) {
                 contract.BetPlaced({ game_id: game_id, book: book, user: walletAddress }, { fromBlock: startBlock })
                     .get(function (err, logs) {
                         var bets = logs.map(log => log.args);
-                        if (window.location.hash.split('_')[0] == '#spread')
+                        if (pageBookType() == 1)
                             bets.forEach(bet => bet.line /= 10);
                         getMyBets.prototype.game_id = game_id;
                         getMyBets.prototype.book = book;
@@ -352,6 +359,7 @@ function updateBids (game_id, book) {
 
 function betsPage(id, book) {
     $("#home-bids-table tbody, #away-bids-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
+    $("#bet-alerts").empty();
     $("#score-row").hide();
 
     getGame(id).then(function (game) {
@@ -409,7 +417,7 @@ function betsPage(id, book) {
             .forEach(bet => addBetToTable("#bets-table", bet));
         var currentLine = bets.filter(bet => bet.home).reverse()[0].line;
         $("#home-line").val(currentLine);
-        if (window.location.hash.split('_')[0] == '#overunder')
+        if (pageBookType() == 3)
             $("#away-line").val(currentLine);
         else
             $("#away-line").val(-currentLine);
@@ -423,83 +431,59 @@ function betsPage(id, book) {
     });
 
     // listeners for bet placement
-    getWalletAddress().then(function (walletAddress) {
-        $("#place-bet-home").click(function (e) {
-            if ($("#home-amount").val().trim() == '' || $("#home-line").val().trim() == '')
+    $("#place-bet-home, #place-bet-away").click(function (e) {
+        getWalletAddress().then(function (walletAddress) {
+            var home = e.target.id == "place-bet-home";
+            var side = home ? "home" : "away";
+            if ($(`#${side}-amount`).val().trim() == '' || $(`#${side}-line`).val().trim() == '')
                 return false;
 
             // prevent double betting
             e.target.disabled = true; 
             setTimeout(() => e.target.disabled = false, 3000);
 
-            var id = window.location.hash.split('_')[1];
-            var line = parseFloat($("#home-line").val()) * 10;
-            var amount = parseFloat($("#home-amount").val()) * 1e18;
-            contract.bid.estimateGas(id, 0, true, line, function (err, gas) {
-                gas = 500000;
-                contract.bid(id, 0, true, line, 
-                    { from: walletAddress, value: amount , gas: gas }, 
-                    function (err, tx_hash) {
-                        e.target.disabled = false;
-                        if (!tx_hash) // rejected transaction
-                            return false;
-                        $("#home-amount").val('');
-                        var team = $('.home').first().html();
-                        if (line > 0)
-                            line = '+' + line;
-                        var notice = `
-                            <div class="alert alert-success">
-                                Bet placed. Transaction processing. View status <a href="https://etherscan.io/tx/${tx_hash}">here</a>
-                            </div>`;
-                        $("#bet-alerts").append(notice);
-                    });
-            });
-        });
-        $("#place-bet-away").click(function (e) {
-            if ($("#away-amount").val().trim() == '' || 
-                $("#away-line").val().trim() == '')
-                return false;
-
-            // prevent double betting
-            e.target.disabled = true; 
-            setTimeout(() => e.target.disabled = false, 3000);
-
-            var id = window.location.hash.split('_')[1];
-            var line = parseFloat($("#away-line").val()) * 10;
-            var amount = parseFloat($("#away-amount").val()) * 1e18;
-            contract.bidSpread.estimateGas(id, false, line, function (err, gas) {
-                gas = 500000;
-                contract.bidSpread(id, false, line, 
-                    { from: walletAddress, value: amount , gas: gas },
-                    function (err, tx_hash) {
-                        e.target.disabled = false;
-                        if (!tx_hash) // rejected transaction
-                            return false;
-                        $("#away-amount").val('');
-                        var team = $('.away').first().html();
-                        if (line > 0)
-                            line = '+' + line;
-                        var notice = `Bet placed. Transaction processing. View status 
-                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`;
-                        $("#bet-description-away").html(notice);
-                    });
-            });
+            var id = pageGameId();
+            var line = parseFloat($(`#${side}-line`).val());
+            if (pageBookType() == 1)
+                line *= 10;
+            var amount = parseFloat($(`#${side}-amount`).val()) * 1e18;
+            var gas = 500000;
+            
+            contract.bid(id, book, home, line, 
+                { from: walletAddress, value: amount , gas: gas }, 
+                function (err, tx) {
+                    e.target.disabled = false;
+                    if (!tx) // rejected transaction
+                        return false;
+                    $(`#${side}-amount`).val('');
+                    var team = $(`.${side}`).first().html();
+                    if (pageBookType() == 1)
+                        line = line / 10;
+                    if (line > 0)
+                        line = '+' + line;
+                    amount = amount / 1e18;
+                    var notice = `Bet for ${amount} ETH placed at ${team} (${line})`;
+                    pageAlert(tx, notice, "#bet-alerts");
+                    $(`#bet-description-${side}`).html('');
+                });
         });
     });
 
     // cancel bid listener
     $(document).on("click", ".cancel-bid", function (e) {
-        var game_id = window.location.hash.split('_')[1];
+        var game_id = pageGameId();
         $.when(getWalletAddress(), getGame(game_id))
         .then(function (walletAddress, game) {
             var $parentRow = $(e.target).parents("tr");
-            var team = $parentRow.find("td").first().html();
+            var team = $parentRow.find("td").first().text().trim();
             var home = team == game.home;
-            var line = parseFloat($parentRow.find("td").eq(1).html()) * 10;
-            contract.cancelBid.sendTransaction(walletAddress, game_id, 
-                line, home, { from: walletAddress, gas: 200000 },
-                function (err, tx_hash) {
-                    $parentRow.remove();
+            var line = parseFloat($parentRow.find("td").eq(1).html());
+            if (pageBookType() == 1)
+                line *= 10;
+            contract.cancelBid(game_id, book, line, home, 
+                { from: walletAddress, gas: 200000 }, function (err, tx) {
+                    if (err) return false;
+                    pageAlert(tx, "Bid cancelation submitted.", "#bet-alerts");
                 });
         });
     });
@@ -521,6 +505,8 @@ function betsPage(id, book) {
     var betPlacedFilter = contract.BetPlaced({ game_id: id });
     betPlacedFilter.watch(function (err, log) {
         var bet = log.args;
+        if (pageBookType() == 1)
+            bet.line /= 10;
         if (bet.home)
             addBetToTable("#bets-table", bet);
         getWalletAddress().then(function (walletAddress) {
@@ -530,6 +516,34 @@ function betsPage(id, book) {
     });
     global_filters.push(betPlacedFilter);
 
+}
+
+function pageBookType () {
+    var page = window.location.hash.slice(1).split('_')[0];
+    switch (page) {
+        case 'spread':
+            return 1;
+        case 'moneyline':
+            return 2;
+        case 'overunder':
+            return 3;
+        default:
+            return 0;
+    }
+}
+
+function pageGameId() {
+    return window.location.hash.split('_')[1];
+}
+
+function pageAlert (tx, text, selector) {
+    var notice = `
+        <div class="alert alert-success alert-dismissable">
+            ${text}. View status <a class="alert-link" href="${txLink(tx)}">here</a>.
+            <a class="close" data-dismiss="alert" aria-label="close">&times;</a>
+        </div>`;
+    $(`#view-container ${selector}`).append(notice);
+    window.scrollTo(0,0);
 }
 
 function updateMyBets (bet, game_id) {
@@ -564,7 +578,7 @@ function updateMyBets (bet, game_id) {
 function addBidToTable (table, bid) {
     var side = bid.home ? "home" : "away";
     var amount = bid.amount / 1e18;
-    if (window.location.hash.split('_')[0] == '#spread')
+    if (pageBookType() == 1)
         var line = bid.line / 10;
     else 
         var line = bid.line;
@@ -650,21 +664,6 @@ function parseBids(hex) {
     return bids;
 }
 
-function scoreGame () {
-    getWalletAddress().then(function (walletAddress) {
-        var inputs = $(e.target).siblings('input');
-        var homeScore = inputs[0].valueAsNumber;
-        var awayScore = inputs[1].valueAsNumber;
-        var game_id = $(e.target).parents("tr").data('id');
-        contract.setGameResult(game_id, homeScore, awayScore, 
-            { from: walletAddress, gas: 1000000 });
-        $("#admin-status").html("Game scored. Transaction sent");
-    });
-}
-
-function createGame () {
-}
-
 function profilePage() {
     getWalletAddress().then(function (walletAddress) {
         $("#profile-address").html(walletAddress);
@@ -707,13 +706,12 @@ function profilePage() {
             e.target.disabled = true;
             getWalletAddress().then(walletAddress => {
                 contract.withdraw({ from: walletAddress, gas: 50000 },
-                    function (err, tx_hash) {
+                    function (err, tx) {
                         if (err) {
                             e.target.disabled = false;
                             return false;
                         }
-                        $("#profile-status").html(`Withdrawal initiated. View status 
-                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`);
+                        pageAlert(tx, "Withdrawal initiated.", "#profile-alerts");
                     });
             });
         });
@@ -742,10 +740,10 @@ function createGamePage() {
             var offset = new Date().getTimezoneOffset() * 60 * 1000;
             var locktime = (document.querySelector("#create-game-locktime").valueAsNumber + offset) / 1000;
             contract.createGame(home, away, category, locktime, 
-                { from: walletAddress, gas: 400000 }, function (err, tx_hash) {
+                { from: walletAddress, gas: 400000, gasPrice: GAS_PRICE }, function (err, tx) {
                     if (err) return false;
                     $("#create-game-status").html(`Creating game. View status 
-                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`);
+                            <a href="${txLink(tx)}">here</a>`);
                     $(".create-game-input").val('');
                 });
         });
@@ -761,46 +759,65 @@ function updateTeams(category) {
 }
 
 function manageGamePage(game_id) {
-    $("#verify-delete-section").hide();
+    $("#game-manage-verify-section").hide();
+    $("#game-manage-score-status").hide();
+
+    $("#game-manage-betting-links").append(`
+        <a href="#spread_${game_id}"><button class="btn btn-bet">SPREAD</button></a>
+        <a href="#moneyline_${game_id}"><button class="btn btn-bet">MONEY LINE</button></a>
+        <a href="#overunder_${game_id}"><button class="btn btn-bet">OVER UNDER</button></a>
+    `);
 
     getGame(game_id).then(function (game) {
         $("#game-manage-home-score").val(game.result.home);
         $("#game-manage-away-score").val(game.result.away);
+        $(".away").html(game.away);
+        $(".home").html(game.home);
         if (game.result.home == '-')
-            $("#game-manage-verify-section").show();
-        else
             $("#game-manage-verify-section").hide();
+        else
+            $("#game-manage-verify-section").show();
     });
 
     $("#game-manage-score-btn").click(function () {
         $.when(getWalletAddress(), getGame(game_id))
             .then(function (walletAddress, game) {
             // make sure game is scorable
-            var now = new Date.getTime() / 1000;
-            if (game.locktime > now)
+            var now = new Date().getTime() / 1000;
+            if (game.locktime > now) {
+                $("#game-manage-score-status")
+                    .html('Games cannot be scored until they begin')
+                    .show();
                 return false;
+            }
 
             var homeScore = parseInt($("#game-manage-home-score").val());
             var awayScore = parseInt($("#game-manage-away-score").val());
             if (homeScore == '' || awayScore == '')
                 return false;
             contract.setGameResult(game_id, homeScore, awayScore,
-                { from: walletAddress, gas: 400000 }, function (err, tx_hash) {
-                    console.log(err, tx_hash);
+                { from: walletAddress, gas: 400000 }, function (err, tx) {
+                    $("#game-manage-score-status").html(`Score submitted. 
+                        View status <a href="${txLink(tx)}">here</a>`).show();
                 });
         });
     });
 
-    $("#initial-delete-btn").click(function () {
-        $("#verify-delete-section").show();
+    $("#delete-game-btn").click(function () {
+        getWalletAddress().then(function (walletAddress) {
+            if ($("#verify-delete-text").val() != "DELETE")
+                return false;
+            contract.deleteGame(game_id, { from: walletAddress, gas: 600000 }, 
+                function (err, tx) {
+                    $("#game-manage-delete-status")
+                        .html(`Deleting Game Permanently. 
+                            View status <a href="${txLink(tx)}">here</a>`)
+                        .show();
+                });
+        });
     });
+}
 
-    $("#permanent-delete").click(function () {
-        if ($("#verify-delete-text").val() != "DELETE")
-            return false;
-        contract.deleteGame(game_id, { from: walletAddress, gas: 600000 }, 
-            function (err, tx_hash) {
-                console.log(err, tx_hash);
-            });
-    });
+function txLink (tx) {
+    return `https://etherscan.io/tx/${tx}`;
 }

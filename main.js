@@ -267,6 +267,7 @@ function getBets(game_id, book) {
                     var bets = logs.map(log => log.args);
                     if (pageBookType() == 1 || pageBookType() == 3)
                         bets.forEach(bet => bet.line /= 10);
+                    bets.forEach(bet => bet.amount = parseFloat(bet.amount / 1e18));
                     getBets.prototype.game_id = game_id;
                     getBets.prototype.book = book;
                     getBets.prototype.bets = bets;
@@ -314,6 +315,7 @@ function getOpenBids(game_id, book) {
             var bids = parseBids(hex);
             if (pageBookType() == 1 || pageBookType() == 3)
                 bids.forEach(bid => bid.line /= 10);
+            bids.forEach(bid => bid.amount = parseFloat(bid.amount / 1e18));
             getOpenBids.prototype.bids = bids;
             getOpenBids.prototype.lastUpdate = new Date();
             getOpenBids.prototype.game_id = game_id;
@@ -362,7 +364,7 @@ function updateBids (game_id, book) {
 
 function betsPage(id, book) {
     $("#home-bids-table tbody, #away-bids-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
-    $("#bet-alerts").empty();
+    $("#view-container #bet-alerts").empty();
     $("#view-container #score-row").hide();
 
     getGame(id).then(function (game) {
@@ -422,10 +424,10 @@ function betsPage(id, book) {
     });
     $.when(getGame(id), getBets(id, book), getWalletAddress())
     .then(function (game, bets, walletAddress) {
+        $("#view-container #bets-table tbody").empty(); 
         if (bets.length == 0)
             return false;
 
-        $("#view-container #bets-table tbody").empty(); 
         bets.filter(bet => bet.home)
             .forEach(bet => addBetToTable("#bets-table", bet));
 
@@ -471,7 +473,7 @@ function betsPage(id, book) {
             setTimeout(() => e.target.disabled = false, 3000);
 
             var id = pageGameId();
-            if (pageBookType() == 1)
+            if (pageBookType() == 1 || pageBookType() == 3)
                 line *= 10;
             var amount = parseFloat($(`#${side}-amount`).val()) * 1e18;
             var gas = 500000;
@@ -483,10 +485,13 @@ function betsPage(id, book) {
                     if (!tx) // rejected transaction
                         return false;
                     $(`#${side}-amount`).val('');
-                    var team = $(`.${side}`).first().html();
-                    if (pageBookType() == 1)
+                    if (pageBookType() == 3)
+                        var team = home ? "Over" : "Under";
+                    else
+                        var team = $(`.${side}`).first().html();
+                    if (pageBookType() == 1 || pageBookType() == 3)
                         line = line / 10;
-                    if (line > 0)
+                    if (line > 0 && pageBookType() != 3)
                         line = '+' + line;
                     amount = amount / 1e18;
                     var notice = `Bid for ${amount} ETH initiated at ${team} (${line}). 
@@ -498,23 +503,29 @@ function betsPage(id, book) {
     });
 
     // cancel bid listener
-    $(document).on("click", ".cancel-bid", function (e) {
+    function cancelBidListener (e) {
         var game_id = pageGameId();
         $.when(getWalletAddress(), getGame(game_id))
         .then(function (walletAddress, game) {
             var $parentRow = $(e.target).parents("tr");
             var team = $parentRow.find("td").first().text().trim();
-            var home = team == game.home;
+            if (pageBookType() == 3)
+                var home = team == "Over";
+            else
+                var home = team == game.home;
             var line = parseFloat($parentRow.find("td").eq(1).html());
-            if (pageBookType() == 1)
+            if (pageBookType() == 1 || pageBookType() == 3)
                 line *= 10;
+            console.log(game_id, book, line, home, walletAddress);
             contract.cancelBid(game_id, book, line, home, 
                 { from: walletAddress, gas: 200000 }, function (err, tx) {
                     if (err) return false;
                     txAlert(tx, "Bid cancelation submitted.", "#bet-alerts");
                 });
         });
-    });
+    }
+    $(document).off("click", ".cancel-bid"); // cancel listeners from other pages
+    $(document).on("click", ".cancel-bid", cancelBidListener);
 
     // Update description when bet changes
     $(".form-control").on('keyup', function (e) {
@@ -533,7 +544,8 @@ function betsPage(id, book) {
     var betPlacedFilter = contract.BetPlaced({ game_id: id });
     betPlacedFilter.watch(function (err, log) {
         var bet = log.args;
-        if (pageBookType() == 1)
+        bet.amount /= 1e18;
+        if (pageBookType() == 1 || pageBookType() == 3)
             bet.line /= 10;
         if (bet.home)
             addBetToTable("#bets-table", bet);
@@ -588,11 +600,6 @@ function errorAlert(text, selector) {
 
 function addBidToTable (table, bid) {
     var side = bid.home ? "home" : "away";
-    var amount = bid.amount / 1e18;
-    if (pageBookType() == 1)
-        var line = bid.line / 10;
-    else 
-        var line = bid.line;
 
     var row = `<tr class="bid">`;
     if (table == "#my-bids-table") {
@@ -606,8 +613,8 @@ function addBidToTable (table, bid) {
                 <span>${bid.team}</span>
             </td>`;
     }
-    row += `<td>${line}</td>
-        <td class="currency">${amount}</td>`;
+    row += `<td>${bid.line}</td>
+        <td class="currency">${bid.amount}</td>`;
     if (table == "#my-bids-table") {
         row += `<td><a class="cancel-bid">Cancel</a></td>`;
     }
@@ -622,9 +629,7 @@ function addBidToTable (table, bid) {
 }
 
 function addBetToTable(table, bet) {
-    console.log(bet.home);
     var row = `<tr class="bet">`;
-    var amount = bet.amount / 1e18;
     var line = bet.line;
 
     if (table == "#my-bets-table") {
@@ -638,7 +643,7 @@ function addBetToTable(table, bet) {
         row += `</td>`;
     }
     row += `<td>${line}</td>
-        <td class="currency">${amount}</td>
+        <td class="currency">${bet.amount}</td>
     </tr>`;
     $("#view-container " + table + " tbody").prepend(row);
 
@@ -687,7 +692,8 @@ function profilePage() {
     getWalletAddress().then(function (walletAddress) {
         $("#profile-address").html(walletAddress);
         contract.balances.call(walletAddress, function (err, balance) {
-            $("#profile-balance").html(parseFloat(balance / 1e18));
+            balance = parseFloat(balance / 1e18);
+            $("#profile-balance").html(balance);
             if (balance == 0)
                 $("#profile-withdraw").hide();
         });
@@ -699,6 +705,7 @@ function profilePage() {
         contract.Withdrawal({ user: walletAddress }, { fromBlock: startBlock })
             .get(function (err, logs) {
                 var withdrawals = logs.map(log => log.args);
+                withdrawals.forEach(w => w.amount = parseFloat(w.amount / 1e18));
                 $("#profile-withdrawals-table tbody").empty();
                 withdrawals.forEach(addWithdrawalToTable);
             });
@@ -723,10 +730,9 @@ function addWithdrawalToTable(withdrawal) {
     var timestamp = new Date(parseInt(withdrawal.timestamp) * 1000);
     var dateString = timestamp.toLocaleDateString();
     var timeString = timestamp.toLocaleTimeString();
-    var amount = parseFloat(withdrawal.amount / 1e18);
     var row = `<tr>
         <td>${dateString} ${timeString}</td>
-        <td class="currency">${amount}</td>
+        <td class="currency">${withdrawal.amount}</td>
     </tr>`;
     $("#profile-withdrawals-table tbody").append(row);
 }
@@ -774,7 +780,7 @@ function manageGamePage(game_id) {
         $(".away").html(game.away);
         $(".home").html(game.home);
 
-        var ms = 1000 * (game.result.timestamp + 12*3600);
+        var ms = 1000 * (game.result.timestamp + 12*6);
         var verifyTime = new Date(ms);
 
         if (game.result.home == '-')
@@ -840,6 +846,26 @@ function manageGamePage(game_id) {
                         .show();
                 });
         });
+    });
+
+    $("#verify-score").click(function () {
+        document.getElementById('verify-score').disabled = true;
+        getWalletAddress().then(function (walletAddress) {
+            contract.verifyGameResult(game_id, { from: walletAddress, gas: 500000 }, function (err, tx) {
+                if (err) {
+                    document.getElementById('verify-score').disabled = false;
+                    return false;
+                }
+                txAlert(tx, "Game verification and bet payment process initiated.", "#game-manage-alerts");
+            });
+        });
+    });
+
+    contract.GameVerified({ game_id: game_id }, { fromBlock: startBlock }, function (err, logs) {
+        if (logs.length == 0) return false;
+        $("#game-manage-verify-status").hide();
+        $("#game-manage-verified-status").show();
+        $("#verify-score").hide();
     });
 }
 

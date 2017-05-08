@@ -200,7 +200,7 @@ contract PeerBet {
         Game game = getGameById(game_id);
         if (msg.sender != game.creator) return 1;
         if (game.status != GameStatus.Scored) return 2;
-        if (now < game.result.timestamp + 12*3600) return 3; // must wait 12 hours to verify 
+        if (now < game.result.timestamp + 12*6) return 3; // must wait 12 hours to verify 
 
         payBets(game_id);
         game.status = GameStatus.Verified;

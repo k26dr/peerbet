@@ -66,7 +66,7 @@ contract PeerBet {
     }
 
 	function createGame (string home, string away, uint16 category, uint64 locktime) returns (int) {
-        bytes32 id = getGameId(home, away, category, locktime);
+        bytes32 id = getGameId(msg.sender, home, away, category, locktime);
         Game memory game = Game(id, msg.sender, home, away, category, locktime, GameStatus.Open, GameResult(0,0,0));
         games.push(game);
         GameCreated(id, game.creator, home, away, category, locktime);
@@ -176,8 +176,8 @@ contract PeerBet {
             bet.status = BetStatus.Paid;
         }
 
-        // OverUnder
-        int totalPoints = game.result.home + game.result.away;
+        // OverUnder - bet.line is 10x the actual line to allow half-point spreads
+        int totalPoints = (game.result.home + game.result.away) * 10;
         for (i=0; i < overUnderBets.length; i++) {
             bet = overUnderBets[i];
             if (bet.status == BetStatus.Paid)
@@ -245,7 +245,8 @@ contract PeerBet {
                 cancelOpenBids(game.books[i]);
             return 2;
         }
-        if (book_type == BookType.Spread && line % 5 != 0)
+        if ((book_type == BookType.Spread || book_type == BookType.OverUnder)
+            && line % 5 != 0)
             return 3;
         else if (book_type == BookType.MoneyLine && line < 100 && line >= -100)
             return 4;
@@ -328,12 +329,12 @@ contract PeerBet {
             // determined required bet amount to match stack bid
             uint requiredBet;
             if (book_type == BookType.Spread || book_type == BookType.OverUnder)
-                requiredBet = bid.amount < matchStack[j].amount ? bid.amount : matchStack[j].amount;
+                requiredBet = matchStack[j].amount;
             else if (matchStack[j].line > 0) { // implied MoneyLine
                 requiredBet = matchStack[j].amount * uint(matchStack[j].line) / 100;
             }
             else { // implied MoneyLine and negative line
-                requiredBet = bid.amount * 100 / uint(-matchStack[j].line);
+                requiredBet = matchStack[j].amount * 100 / uint(-matchStack[j].line);
             }
 
             // determine bet amounts on both sides
@@ -402,7 +403,7 @@ contract PeerBet {
         bytes memory b = bytes(away);
         bytes2 c = bytes2(category);
         bytes8 d = bytes8(locktime);
-        bytes memory e = bytes(creator);
+        bytes20 e = bytes20(creator);
 
         uint length = a.length + b.length + c.length + d.length + e.length;
         bytes memory toHash = new bytes(length);
@@ -412,8 +413,7 @@ contract PeerBet {
         for (i = 0; i < c.length; i++) { toHash[k] = c[i]; k++; }
         for (i = 0; i < d.length; i++) { toHash[k] = d[i]; k++; }
         for (i = 0; i < e.length; i++) { toHash[k] = e[i]; k++; }
-        return keccak256(toHash);
-        
+        return sha3(toHash);
     }
     
     function getActiveGames () constant returns (bytes32[]) {

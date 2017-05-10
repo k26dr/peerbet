@@ -463,9 +463,21 @@ function betsPage(id, book) {
 
             // line validations
             var line = parseFloat($(`#${side}-line`).val());
-            if (pageBookType() == 2 && line >= -100 && line < 100) {
-                errorAlert("Line cannot be between -100 and 99", "#bet-alerts");
-                return false;
+            if (pageBookType() == 2) {
+                if (line >= -100 && line < 100) {
+                    errorAlert("Line cannot be between -100 and 99", "#bet-alerts");
+                    return false;
+                }
+                if (line % 1 != 0) {
+                    errorAlert("Line must be a whole number", "#bet-alerts");
+                    return false;
+                }
+            }
+            else {
+                if (line % 0.5 != 0) {
+                    errorAlert("Only half point lines are allowed.", "#bet-alerts");
+                    return false;
+                }
             }
 
             // prevent double betting
@@ -544,8 +556,10 @@ function betsPage(id, book) {
     var betPlacedFilter = contract.BetPlaced({ game_id: id });
     betPlacedFilter.watch(function (err, log) {
         var bet = log.args;
+        if (bet.game_id != id || bet.book != book)
+            return false;
         bet.amount /= 1e18;
-        if (pageBookType() == 1 || pageBookType() == 3)
+        if (bet.book == 1 || bet.book == 3)
             bet.line /= 10;
         if (bet.home)
             addBetToTable("#bets-table", bet);
@@ -767,6 +781,7 @@ function updateTeams(category) {
 function manageGamePage(game_id) {
     $("#game-manage-verify-section").hide();
     $("#game-manage-score-status").hide();
+    $("#game-manage-verified-status").hide();
 
     $("#game-manage-betting-links").append(`
         <a href="#spread_${game_id}"><button class="btn btn-bet">SPREAD</button></a>
@@ -780,7 +795,7 @@ function manageGamePage(game_id) {
         $(".away").html(game.away);
         $(".home").html(game.home);
 
-        var ms = 1000 * (game.result.timestamp + 12*6);
+        var ms = 1000 * (game.result.timestamp + 12*3600);
         var verifyTime = new Date(ms);
 
         if (game.result.home == '-')
@@ -816,9 +831,7 @@ function manageGamePage(game_id) {
             // make sure game is scorable
             var now = new Date().getTime() / 1000;
             if (game.locktime > now) {
-                $("#game-manage-score-status")
-                    .html('Games cannot be scored until they begin')
-                    .show();
+                errorAlert("Games cannot be scored until after they start", "#game-manage-alerts");
                 return false;
             }
 

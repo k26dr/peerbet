@@ -73,9 +73,9 @@ contract PeerBet {
         return -1;
     }
     
-    function cancelOpenBids(Book book) private returns (int) {
+    function cancelOpenBids(Book storage book) private returns (int) {
         for (uint i=0; i < book.homeBids.length; i++) {
-            Bid memory bid = book.homeBids[i];
+            Bid bid = book.homeBids[i];
             if (bid.amount == 0)
                 continue;
             balances[bid.bidder] += bid.amount;
@@ -118,7 +118,7 @@ contract PeerBet {
         Game game = getGameById(game_id);
         if (msg.sender != game.creator && (game.locktime + 86400*4) > now) return 1;
 
-        for (uint i=0; i < 3; i++) {
+        for (uint i=1; i < 4; i++) {
             Book book = game.books[i];
             cancelOpenBids(book);
             cancelBets(book, BookType(i));
@@ -159,20 +159,25 @@ contract PeerBet {
         }
 
         // MoneyLine
+        bool tie = game.result.home == game.result.away;
         bool homeWin = game.result.home > game.result.away;
         for (i=0; i < moneyLineBets.length; i++) {
             bet = moneyLineBets[i];
             if (bet.status == BetStatus.Paid)
                 continue;
-            uint payout = bet.amount;
+            uint awayAmount;
             if (bet.line < 0)
-                payout += bet.amount * 100 / uint(bet.line);
+                awayAmount = bet.amount * 100 / uint(-bet.line);
             else
-                payout += bet.amount * uint(bet.line) / 100;
-            if (homeWin)
-                balances[bet.home] += payout;
+                awayAmount = bet.amount * uint(bet.line) / 100;
+            if (tie) {
+                balances[bet.home] += bet.amount;
+                balances[bet.away] += awayAmount;
+            }
+            else if (homeWin)
+                balances[bet.home] += (bet.amount + awayAmount);
             else
-                balances[bet.away] += payout;
+                balances[bet.away] += (bet.amount + awayAmount);
             bet.status = BetStatus.Paid;
         }
 
@@ -200,7 +205,7 @@ contract PeerBet {
         Game game = getGameById(game_id);
         if (msg.sender != game.creator) return 1;
         if (game.status != GameStatus.Scored) return 2;
-        if (now < game.result.timestamp + 12*6) return 3; // must wait 12 hours to verify 
+        if (now < game.result.timestamp + 12*3600) return 3; // must wait 12 hours to verify 
 
         payBets(game_id);
         game.status = GameStatus.Verified;
@@ -215,7 +220,7 @@ contract PeerBet {
         if (game.locktime > now) return 2;
         if (game.status == GameStatus.Verified) return 3;
 
-        for (uint i=0; i < 3; i++)
+        for (uint i = 1; i < 4; i++)
             cancelOpenBids(game.books[i]);
 
         game.result.home = homeScore;
@@ -241,7 +246,7 @@ contract PeerBet {
             return 1;
         if (now > game.locktime) {
             game.status = GameStatus.Locked;    
-            for (uint i=0; i < 3; i++)
+            for (uint i = 1; i < 4; i++)
                 cancelOpenBids(game.books[i]);
             return 2;
         }

@@ -1,7 +1,8 @@
 var docReady = $.Deferred();
 $(docReady.resolve);
 
-var abiPromise = $.get("abi.json");
+var GAS_PRICE = 2e10;
+var abiPromise = $.get("bin/peerbet.sol:PeerBet.abi");
 var contractAddressPromise = $.get("contract_address");
 var dictionaryPromise = $.get("data_dictionary.json");
 var startBlockPromise = $.get("start_block");
@@ -22,7 +23,7 @@ var web3Promise = new Promise(function (resolve, reject) {
 $.when(contractAddressPromise, abiPromise, dictionaryPromise, startBlockPromise, docReady, web3Promise)
     .always(function (contractAddress, abiJSON, dictionary, startBlock) {
     var contractAddress = contractAddress[0];
-    var abi = abiJSON[0];
+    var abi = JSON.parse(abiJSON[0]);
     window.dictionary = dictionary[0];
     window.startBlock = startBlock[0];
     contract = web3.eth.contract(abi).at(contractAddress);
@@ -47,12 +48,20 @@ function route(page, params) {
     $('#view-container').empty().hide();
     switch (page) {
         case 'spread':
-            $("#view-container").html($("#spread").html());
-            spreadPage(params[0]);
+            $("#view-container").html($("#bets-page").html());
+            betsPage(params[0], 1);
             break;
-        case 'admin':
-            $("#view-container").html($("#admin").html());
-            adminPage();
+        case 'moneyline':
+            $("#view-container").html($("#bets-page").html());
+            betsPage(params[0], 2);
+            break;
+        case 'overunder':
+            $("#view-container").html($("#bets-page").html());
+            betsPage(params[0], 3);
+            break;
+        case 'creategame':
+            $("#view-container").html($("#create-game").html());
+            createGamePage();
             break;
         case 'withdraw':
         case 'profile':
@@ -62,6 +71,10 @@ function route(page, params) {
         case 'results':
             $("#view-container").html($("#results").html());
             resultsPage();
+            break;
+        case 'manage':
+            $("#view-container").html($("#manage-game").html());
+            manageGamePage(params[0]);
             break;
         case 'games':
         default:
@@ -83,12 +96,13 @@ function getWalletAddress () {
         else if (sessionStorage.walletAddress)
             resolve(sessionStorage.walletAddress);
         else if (typeof mist !== 'undefined') {
-            mist.requestAccount(function (err, walletAddress) {
+            mist.requestAccount(function (err, accounts) {
                 if (err) reject(err);
                 else {
                     // cache then resolve
-                    sessionStorage.walletAddress = walletAddress[0];
-                    resolve(walletAddress[0]);
+                    var account = accounts[accounts.length - 1];
+                    sessionStorage.walletAddress = account;
+                    resolve(account);
                 }
             })
         }
@@ -124,7 +138,7 @@ function getGames () {
                 });
         });
     });
-    // TODO include scores in games
+
     return new Promise((resolve, reject) => {
         $.when(gamesPromise, scoresPromise).then((games, scores) => {
             var scoresObj = {}
@@ -133,7 +147,8 @@ function getGames () {
                 if (scoresObj[game.id]) {
                     game.result = { 
                         home: scoresObj[game.id].homeScore, 
-                        away: scoresObj[game.id].awayScore
+                        away: scoresObj[game.id].awayScore,
+                        timestamp: parseInt(scoresObj[game.id].timestamp)
                     }
                 }
                 else
@@ -158,7 +173,7 @@ function gamesPage() {
         var now = new Date().getTime() / 1000;
         games.filter(game => game.locktime > now)
             .sort((a,b) => a.locktime - b.locktime)
-            .forEach(game => addGameToTable(game, dictionary.categories, "#games-table"));
+            .forEach(game => addGameToTable(game, "#games-table"));
     });
 }
 
@@ -168,13 +183,13 @@ function resultsPage () {
         var now = new Date().getTime() / 1000;
         games.filter(game => game.locktime < now)
             .sort((a,b) => b.locktime - a.locktime)
-            .forEach(game => addGameToTable(game, dictionary.categories, "#results-table"));
+            .forEach(game => addGameToTable(game, "#results-table"));
     });
 }
 
     
-function addGameToTable (game, categories, table) {
-    var category = categories[parseInt(game.category)];
+function addGameToTable (game, table) {
+    var category = dictionary.categories[parseInt(game.category)];
     var gametime = new Date(parseInt(game.locktime) * 1000);
     var date = gametime.toString().slice(0,10);
     var time = gametime.toTimeString().slice(0,5);
@@ -188,24 +203,18 @@ function addGameToTable (game, categories, table) {
             <div class="logo logo-away"></div>
             <span class="away">${game.away}</span>
         </td>`;
-    if (table == "#results-table")
+    if (table == "#results-table" || table == "#my-games-table")
         row += `<td>${game.result.home} - ${game.result.away}</td>`;
     row += ` <td>${category}</td>
         <td>${date}</td>
         <td>${time}</td>`;
-    if (table == '#admin-games-table' && 
-        (game.status > 0 || new Date() > gametime)) {
-        row += `<td>
-            <input type="number" class="score-home" value="${game.result.home}"> -
-            <input type="number" class="score-away" value="${game.result.away}">
-            <button class="score-game">Score</button>
-        </td>`;
-    }
+    if (table == "#my-games-table")
+        row += `<td><a href="#manage_${game.id}"><button class="btn btn-bet">MANAGE</button></a></td>`;
     else {
-        row += `<td>
-            <a href="#spread_${game.id}">
-                <button class="btn btn-bet">SPREAD</button> 
-            </a>
+        row += `<td class="bets-cell">
+            <a href="#spread_${game.id}"><button class="btn btn-bet">SPREAD</button></a>
+            <a href="#moneyline_${game.id}"><button class="btn btn-bet">MONEY LINE</button></a>
+            <a href="#overunder_${game.id}"><button class="btn btn-bet">OVER UNDER</button></a>
         </td>`;
     }
     row += `</tr>`;
@@ -246,16 +255,21 @@ function getETHtoUSDConversion () {
     });
 }
 
-function getBets(game_id) {
+function getBets(game_id, book) {
     return new Promise(function (resolve, reject) {
         // if cache is set and is for this game
-        if (getBets.prototype.game_id == game_id)
+        if (getBets.prototype.game_id == game_id &&
+            getBets.prototype.book === book)
             resolve(getBets.prototype.bets);
         else {
-            contract.BetPlaced({ game_id: game_id }, { fromBlock: startBlock })
+            contract.BetPlaced({ game_id: game_id, book: book }, { fromBlock: startBlock })
                 .get(function (err, logs) {
                     var bets = logs.map(log => log.args);
+                    if (pageBookType() == 1 || pageBookType() == 3)
+                        bets.forEach(bet => bet.line /= 10);
+                    bets.forEach(bet => bet.amount = parseFloat(bet.amount / 1e18));
                     getBets.prototype.game_id = game_id;
+                    getBets.prototype.book = book;
                     getBets.prototype.bets = bets;
                     resolve(bets);
                 });
@@ -263,17 +277,24 @@ function getBets(game_id) {
     });
 }
 
-function getMyBets(game_id) {
+// This function is available, but is currently unused
+// in the interest of minimizing JSON-RPC calls. A user's
+// bets can be filtered from getBets() instead.
+function getMyBets(game_id, book) {
     return new Promise(function (resolve, reject) {
         // if cache is set and is for this game
-        if (getMyBets.prototype.game_id == game_id)
+        if (getMyBets.prototype.game_id == game_id &&
+            getMyBets.prototype.book == book)
             resolve(getMyBets.prototype.bets);
         else {
             getWalletAddress().then(function (walletAddress) {
-                contract.BetPlaced({ game_id: game_id, user: walletAddress }, { fromBlock: startBlock })
+                contract.BetPlaced({ game_id: game_id, book: book, user: walletAddress }, { fromBlock: startBlock })
                     .get(function (err, logs) {
                         var bets = logs.map(log => log.args);
+                        if (pageBookType() == 1)
+                            bets.forEach(bet => bet.line /= 10);
                         getMyBets.prototype.game_id = game_id;
+                        getMyBets.prototype.book = book;
                         getMyBets.prototype.bets = bets;
                         resolve(bets);
                     });
@@ -282,85 +303,81 @@ function getMyBets(game_id) {
     });
 }
 
-
-function getOpenBids(game_id) {
+function getOpenBids(game_id, book) {
     return new Promise(function (resolve, reject) {
-        // use cache if less than 5 seconds old and is the right game
+        // use cache if less than 5 seconds old and is the right game and book
         if (getOpenBids.prototype.lastUpdate &&
             getOpenBids.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
-            getOpenBids.prototype.game_id == game_id)
+            getOpenBids.prototype.game_id == game_id &&
+            getOpenBids.prototype.book == book)
             resolve(getOpenBids.prototype.bids);
-        contract.getOpenBids.call(game_id, function (err, hex) {
+        contract.getOpenBids.call(game_id, book, function (err, hex) {
             var bids = parseBids(hex);
+            if (pageBookType() == 1 || pageBookType() == 3)
+                bids.forEach(bid => bid.line /= 10);
+            bids.forEach(bid => bid.amount = parseFloat(bid.amount / 1e18));
             getOpenBids.prototype.bids = bids;
             getOpenBids.prototype.lastUpdate = new Date();
             getOpenBids.prototype.game_id = game_id;
+            getOpenBids.prototype.book = book;
             resolve(bids);
         });
     });
 }
 
-function getOpenBidsByLine(game_id) {
-    return new Promise(function (resolve, reject) {
-        // use cache if less than 5 seconds old and is the right game
-        if (getOpenBidsByLine.prototype.lastUpdate &&
-            getOpenBidsByLine.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
-            getOpenBidsByLine.prototype.game_id == game_id)
-            resolve(getOpenBidsByLine.prototype.bids);
-        contract.getOpenBidsByLine.call(game_id, function (err, hex) {
-            var bids = parseBids(hex);
-            getOpenBidsByLine.prototype.bids = bids;
-            getOpenBidsByLine.prototype.lastUpdate = new Date();
-            getOpenBidsByLine.prototype.game_id = game_id;
-            resolve(bids);
-        });
+function groupByLine (bids) {
+    var lines = { home: {}, away: {} };
+    bids.forEach(bid => {
+        var side = bid.home ? "home" : "away";
+        if (lines[side][bid.line])
+            lines[side][bid.line] += bid.amount;
+        else
+            lines[side][bid.line] = bid.amount;
     });
-}
-
-function getMyOpenBids(game_id, walletAddress) {
-    return new Promise(function (resolve, reject) {
-        // use cache if less than 5 seconds old and is the right game
-        if (getMyOpenBids.prototype.lastUpdate &&
-            getMyOpenBids.prototype.lastUpdate.getTime() + 4000 > new Date().getTime() && 
-            getMyOpenBids.prototype.game_id == game_id)
-            resolve(getMyOpenBids.prototype.bids);
-        getWalletAddress().then(function (walletAddress) {
-            contract.getOpenBidsByBidder.call(game_id, walletAddress, function (err, hex) {
-                var bids = parseBids(hex);
-                getMyOpenBids.prototype.bids = bids;
-                getMyOpenBids.prototype.lastUpdate = new Date();
-                getMyOpenBids.prototype.game_id = game_id;
-                resolve(bids);
-            });
-        });
-    });
+    return lines;
 }
             
-function updateBids (game_id) {
-    getOpenBidsByLine(game_id).then(function (bids) {
-        $("#home-bids-table tbody, #away-bids-table tbody").empty();
-        bids.forEach(bid => {
-            if (bid.home) addBidToTable("#home-bids-table", bid);
-            else addBidToTable("#away-bids-table", bid);
-        });
-    });
-    $.when(getGame(game_id), getMyOpenBids(game_id)).then(function (game, bids) {
-        $("#my-bids-table tbody").empty();
-        bids.forEach(bid => {
-            bid.team = bid.home ? game.home : game.away;
-            addBidToTable("#my-bids-table", bid);
-        });
+            
+function updateBids (game_id, book) {
+    $.when(getOpenBids(game_id, book), getWalletAddress(), getGame(game_id))
+    .then(function (bids, walletAddress, game) {
+        bids = bids.filter(bid => bid.amount > 0);
+        $("#home-bids-table tbody, #away-bids-table tbody, #my-bids-table tbody").empty();
+        var lines = groupByLine(bids);
+        var homeLines = Object.keys(lines.home);
+        if (pageBookType() == 3)
+            homeLines.sort((a,b) => a -b)
+        else
+            homeLines.sort((a,b) => b -a)
+        homeLines.forEach(line => addBidToTable("#home-bids-table", { line: line, amount: lines.home[line] }));
+        Object.keys(lines.away)
+            .sort((a,b) => b - a)
+            .forEach(line => addBidToTable("#away-bids-table", { line: line, amount: lines.away[line] }));
+        bids.filter(bid => bid.bidder == walletAddress)
+            .forEach(bid => { bid.team = bid.home ? game.home : game.away;
+                addBidToTable("#my-bids-table", bid);
+            });
+        
     });
 }
     
 
-function spreadPage(id) {
+function betsPage(id, book) {
     $("#home-bids-table tbody, #away-bids-table tbody, #my-bets-table tbody, #my-bids-table tbody").empty();
-    $("#score-row").hide();
+    $("#view-container #bet-alerts").empty();
+    $("#view-container #score-row").hide();
 
     getGame(id).then(function (game) {
-        $('.home').html(game.home);
-        $('.away').html(game.away);
+        if (pageBookType() == 3) {
+            $('.home').html("Over");
+            $('.away').html("Under");
+            $('h1 .home').html(game.home);
+            $('h1 .away').html(game.away);
+        }
+        else {
+            $('.home').html(game.home);
+            $('.away').html(game.away);
+        }
 
         // display logos
         var homePos = getLogoPosition(game.home);
@@ -405,103 +422,122 @@ function spreadPage(id) {
             $('#score-row').show();
         }
     });
-    getBets(id).then(function (bets) {
+    $.when(getGame(id), getBets(id, book), getWalletAddress())
+    .then(function (game, bets, walletAddress) {
         $("#view-container #bets-table tbody").empty(); 
         if (bets.length == 0)
             return false;
+
         bets.filter(bet => bet.home)
             .forEach(bet => addBetToTable("#bets-table", bet));
-        var currentLine = bets.filter(bet => bet.home).reverse()[0].line / 10;
+
+        // display my bets
+        var myBets = bets.filter(bet => bet.user == walletAddress);
+        var lines = groupByLine(myBets);
+        Object.keys(lines.home)
+            .forEach(line => addBetToTable("#my-bets-table", 
+                { line: line, amount: lines.home[line], team: game.home, home: true }));
+        Object.keys(lines.away)
+            .forEach(line => addBetToTable("#my-bets-table", 
+                { line: line, amount: lines.away[line], team: game.away, home: false }));
+
+        // display most recent line
+        var currentLine = bets.filter(bet => bet.home).reverse()[0].line;
         $("#home-line").val(currentLine);
-        $("#away-line").val(-currentLine);
+        if (pageBookType() == 3)
+            $("#away-line").val(currentLine);
+        else
+            $("#away-line").val(-currentLine);
     });
-    updateBids(id);
-    var updateBidsInterval = setInterval(() => updateBids(id), 5000);
+    updateBids(id, book);
+    var updateBidsInterval = setInterval(() => updateBids(id, book), 5000);
     global_intervals.push(updateBidsInterval);
 
-    getMyBets(id).then(function (myBets) {
-        myBets.forEach(bet => updateMyBets(bet, id));
-    });
-
     // listeners for bet placement
-    getWalletAddress().then(function (walletAddress) {
-        $("#place-bet-home").click(function (e) {
-            if ($("#home-amount").val().trim() == '' || $("#home-line").val().trim() == '')
+    $("#place-bet-home, #place-bet-away").click(function (e) {
+        getWalletAddress().then(function (walletAddress) {
+            var home = e.target.id == "place-bet-home";
+            var side = home ? "home" : "away";
+            if ($(`#${side}-amount`).val().trim() == '' || $(`#${side}-line`).val().trim() == '')
                 return false;
+
+            // line validations
+            var line = parseFloat($(`#${side}-line`).val());
+            if (pageBookType() == 2) {
+                if (line >= -100 && line < 100) {
+                    errorAlert("Line cannot be between -100 and 99", "#bet-alerts");
+                    return false;
+                }
+                if (line % 1 != 0) {
+                    errorAlert("Line must be a whole number", "#bet-alerts");
+                    return false;
+                }
+            }
+            else {
+                if (line % 0.5 != 0) {
+                    errorAlert("Only half point lines are allowed.", "#bet-alerts");
+                    return false;
+                }
+            }
 
             // prevent double betting
             e.target.disabled = true; 
             setTimeout(() => e.target.disabled = false, 3000);
 
-            var id = window.location.hash.split('_')[1];
-            var line = parseFloat($("#home-line").val()) * 10;
-            var amount = parseFloat($("#home-amount").val()) * 1e18;
-            contract.bidSpread.estimateGas(id, true, line, function (err, gas) {
-                gas = 500000;
-                contract.bidSpread.sendTransaction(id, true, line, 
-                    { from: walletAddress, value: amount , gas: gas }, 
-                    function (err, tx_hash) {
-                        e.target.disabled = false;
-                        if (!tx_hash) // rejected transaction
-                            return false;
-                        $("#home-amount").val('');
-                        var team = $('.home').first().html();
-                        if (line > 0)
-                            line = '+' + line;
-                        var notice = `Bet placed. Transaction processing. View status 
-                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`;
-                        $("#bet-description-home").html(notice);
-                    });
-            });
-        });
-        $("#place-bet-away").click(function (e) {
-            if ($("#away-amount").val().trim() == '' || 
-                $("#away-line").val().trim() == '')
-                return false;
-
-            // prevent double betting
-            e.target.disabled = true; 
-            setTimeout(() => e.target.disabled = false, 3000);
-
-            var id = window.location.hash.split('_')[1];
-            var line = parseFloat($("#away-line").val()) * 10;
-            var amount = parseFloat($("#away-amount").val()) * 1e18;
-            contract.bidSpread.estimateGas(id, false, line, function (err, gas) {
-                gas = 500000;
-                contract.bidSpread(id, false, line, 
-                    { from: walletAddress, value: amount , gas: gas },
-                    function (err, tx_hash) {
-                        e.target.disabled = false;
-                        if (!tx_hash) // rejected transaction
-                            return false;
-                        $("#away-amount").val('');
-                        var team = $('.away').first().html();
-                        if (line > 0)
-                            line = '+' + line;
-                        var notice = `Bet placed. Transaction processing. View status 
-                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`;
-                        $("#bet-description-away").html(notice);
-                    });
-            });
+            var id = pageGameId();
+            if (pageBookType() == 1 || pageBookType() == 3)
+                line *= 10;
+            var amount = parseFloat($(`#${side}-amount`).val()) * 1e18;
+            var gas = 500000;
+            
+            contract.bid(id, book, home, line, 
+                { from: walletAddress, value: amount , gas: gas }, 
+                function (err, tx) {
+                    e.target.disabled = false;
+                    if (!tx) // rejected transaction
+                        return false;
+                    $(`#${side}-amount`).val('');
+                    if (pageBookType() == 3)
+                        var team = home ? "Over" : "Under";
+                    else
+                        var team = $(`.${side}`).first().html();
+                    if (pageBookType() == 1 || pageBookType() == 3)
+                        line = line / 10;
+                    if (line > 0 && pageBookType() != 3)
+                        line = '+' + line;
+                    amount = amount / 1e18;
+                    var notice = `Bid for ${amount} ETH initiated at ${team} (${line}). 
+                        This page will update when the bid clears.`;
+                    txAlert(tx, notice, "#bet-alerts");
+                    $(`#bet-description-${side}`).html('');
+                });
         });
     });
 
     // cancel bid listener
-    $(document).on("click", ".cancel-bid", function (e) {
-        var game_id = window.location.hash.split('_')[1];
+    function cancelBidListener (e) {
+        var game_id = pageGameId();
         $.when(getWalletAddress(), getGame(game_id))
         .then(function (walletAddress, game) {
             var $parentRow = $(e.target).parents("tr");
-            var team = $parentRow.find("td").first().html();
-            var home = team == game.home;
-            var line = parseFloat($parentRow.find("td").eq(1).html()) * 10;
-            contract.cancelBid.sendTransaction(walletAddress, game_id, 
-                line, home, { from: walletAddress, gas: 200000 },
-                function (err, tx_hash) {
-                    $parentRow.remove();
+            var team = $parentRow.find("td").first().text().trim();
+            if (pageBookType() == 3)
+                var home = team == "Over";
+            else
+                var home = team == game.home;
+            var line = parseFloat($parentRow.find("td").eq(1).html());
+            if (pageBookType() == 1 || pageBookType() == 3)
+                line *= 10;
+            console.log(game_id, book, line, home, walletAddress);
+            contract.cancelBid(game_id, book, line, home, 
+                { from: walletAddress, gas: 200000 }, function (err, tx) {
+                    if (err) return false;
+                    txAlert(tx, "Bid cancelation submitted.", "#bet-alerts");
                 });
         });
-    });
+    }
+    $(document).off("click", ".cancel-bid"); // cancel listeners from other pages
+    $(document).on("click", ".cancel-bid", cancelBidListener);
 
     // Update description when bet changes
     $(".form-control").on('keyup', function (e) {
@@ -520,80 +556,116 @@ function spreadPage(id) {
     var betPlacedFilter = contract.BetPlaced({ game_id: id });
     betPlacedFilter.watch(function (err, log) {
         var bet = log.args;
+        if (bet.game_id != id || bet.book != book)
+            return false;
+        bet.amount /= 1e18;
+        if (bet.book == 1 || bet.book == 3)
+            bet.line /= 10;
         if (bet.home)
             addBetToTable("#bets-table", bet);
-        getWalletAddress().then(function (walletAddress) {
-            if (bet.user == walletAddress)
-                updateMyBets(bet, id);
+        $.when(getGame(id), getWalletAddress()).then(function (game, walletAddress) {
+            if (bet.user == walletAddress) {
+                bet.team = bet.home ? game.home : game.away;
+                addBetToTable("#my-bets-table", bet);
+            }
         });
     });
     global_filters.push(betPlacedFilter);
 
 }
 
-function updateMyBets (bet, game_id) {
-    getGame(game_id).then(function (game) {
-        if (!updateMyBets.prototype.lines || updateMyBets.prototype.game_id !=  game_id) {
-            updateMyBets.prototype.lines = { home: {}, away: {} };
-            updateMyBets.prototype.game_id = game_id;
-        }
-        var side = bet.home ? 'home' : 'away';
-        var line = parseInt(bet.line);
-        if (updateMyBets.prototype.lines[side][line])
-            updateMyBets.prototype.lines[side][line] += parseInt(bet.amount);
-        else
-            updateMyBets.prototype.lines[side][line] = parseInt(bet.amount);
+function pageBookType () {
+    var page = window.location.hash.slice(1).split('_')[0];
+    switch (page) {
+        case 'spread':
+            return 1;
+        case 'moneyline':
+            return 2;
+        case 'overunder':
+            return 3;
+        default:
+            return 0;
+    }
+}
 
-        $("#my-bets-table tbody").empty();
-        Object.keys(updateMyBets.prototype.lines.home)
-            .forEach(line => addBetToTable("#my-bets-table", { 
-                team: game.home, 
-                line: line, 
-                amount: updateMyBets.prototype.lines.home[line] 
-            }));
-        Object.keys(updateMyBets.prototype.lines.away)
-            .forEach(line => addBetToTable("#my-bets-table", { 
-                team: game.away, 
-                line: line, 
-                amount: updateMyBets.prototype.lines.away[line] 
-            }));
-    });
+function pageGameId() {
+    return window.location.hash.split('_')[1];
+}
+
+function txAlert (tx, text, selector) {
+    var notice = `
+        <div class="alert alert-success alert-dismissable">
+            ${text} View status <a class="alert-link" href="${txLink(tx)}">here</a>.
+            <a class="close" data-dismiss="alert" aria-label="close">&times;</a>
+        </div>`;
+    $(`#view-container ${selector}`).append(notice);
+    window.scrollTo(0,0);
+}
+
+function errorAlert(text, selector) {
+    var notice = `
+        <div class="alert alert-danger alert-dismissable">
+            ${text}
+            <a class="close" data-dismiss="alert" aria-label="close">&times;</a>
+        </div>`;
+    $(`#view-container ${selector}`).append(notice);
+    window.scrollTo(0,0);
 }
 
 function addBidToTable (table, bid) {
     var side = bid.home ? "home" : "away";
-    var amount = bid.amount / 1e18;
-    var line = bid.line / 10;
 
     var row = `<tr class="bid">`;
     if (table == "#my-bids-table") {
-        row += `<td>${bid.team}</td>`;
+        if (pageBookType() == 3) {
+            var side = bid.home ? "Over" : "Under";
+            row += `<td>${side}</td>`;
+        }
+        else
+            row += `<td>
+                <div class="logo"></div>
+                <span>${bid.team}</span>
+            </td>`;
     }
-    row += `<td>${line}</td>
-        <td class="currency">${amount}</td>`;
+    row += `<td>${bid.line}</td>
+        <td class="currency">${bid.amount}</td>`;
     if (table == "#my-bids-table") {
         row += `<td><a class="cancel-bid">Cancel</a></td>`;
     }
     row += `</tr>`;
     $(table + " tbody").prepend(row);
+
+    // set logos
+    var logoPos = getLogoPosition(bid.team);
+    $(`#view-container ${table} .logo`).first()
+        .css('background-position-x', logoPos.x)
+        .css('background-position-y', logoPos.y);
 }
 
 function addBetToTable(table, bet) {
     var row = `<tr class="bet">`;
-    var amount = bet.amount / 1e18;
-    var line = bet.line / 10;
+    var line = bet.line;
 
     if (table == "#my-bets-table") {
-        row += `<td>${bet.team}</td>`;
-    }
-    else if (table == "#profile-bets-table") {
-        row += `<td>${bet.date}</td>
-            <td>${bet.team}</td>`;
+        row += `<td>`;
+        if (pageBookType() == 1 || pageBookType() == 2) {
+            row += `<div class="logo"></div>`;
+            row += `<span>${bet.team}</span>`;
+        }
+        else if (pageBookType() == 3)
+            row += bet.home ? "Over" : "Under";
+        row += `</td>`;
     }
     row += `<td>${line}</td>
-        <td class="currency">${amount}</td>
+        <td class="currency">${bet.amount}</td>
     </tr>`;
     $("#view-container " + table + " tbody").prepend(row);
+
+    // set logos
+    var logoPos = getLogoPosition(bet.team);
+    $(`#view-container ${table} .logo`).first()
+        .css('background-position-x', logoPos.x)
+        .css('background-position-y', logoPos.y);
 }
 
 function parseBid(hex) {
@@ -627,85 +699,27 @@ function parseBids(hex) {
             bids.push(parseBid(hex.slice(i, i+114)));
     }
 
-    return bids.filter(bid => bid.amount > 0);
-}
-
-function adminPage () {
-    $("#admin-games-table tbody").empty();
-    getGames().then(function (games) {
-        adminPage.prototype.games = games;
-        var game_ids = games.map(game => game.id);
-        games.forEach(game => game.result = { home: '', away: '' });
-        contract.GameScored({ game_id: game_ids }, { fromBlock: startBlock })
-            .get(function (err, logs) {
-                var scores  = logs.map(log => log.args);
-                scores.forEach(function (score) {
-                    var game = games.filter(game => game.id == score.game_id)[0];
-                    game.result.home = score.homeScore;
-                    game.result.away = score.awayScore;
-                });
-                games.forEach(game => addGameToTable(game, 
-                    dictionary.categories, "#admin-games-table"));
-            });
-    });
-
-    $('#create-game-submit').on('click', function () {
-        getWalletAddress().then(function (walletAddress) {
-            var home = document.getElementById("create-game-home").value;
-            var away = document.getElementById("create-game-away").value;
-            var category = document.getElementById("create-game-category").valueAsNumber;
-            var offset = new Date().getTimezoneOffset() * 60 * 1000;
-            var locktime = parseInt((document.querySelector("#create-game-locktime").valueAsNumber + offset) / 1000);
-            contract.createGame(home, away, category, locktime, 
-                { from: walletAddress, gas: 400000 }, function (err, tx_hash) {
-                    $("#admin-status").html("Creating game. Transaction sent");
-                    $(".create-game-input").val('');
-                });
-        });
-    });
-
-    $(document).on('click', '.score-game', function (e) {
-        getWalletAddress().then(function (walletAddress) {
-            var inputs = $(e.target).siblings('input');
-            var homeScore = inputs[0].valueAsNumber;
-            var awayScore = inputs[1].valueAsNumber;
-            var game_id = $(e.target).parents("tr").data('id');
-            contract.setGameResult(game_id, homeScore, awayScore, 
-                { from: walletAddress, gas: 1000000 });
-            $("#admin-status").html("Game scored. Transaction sent");
-        });
-    });
+    return bids;
 }
 
 function profilePage() {
     getWalletAddress().then(function (walletAddress) {
         $("#profile-address").html(walletAddress);
         contract.balances.call(walletAddress, function (err, balance) {
-            $("#profile-balance").html(parseFloat(balance / 1e18));
+            balance = parseFloat(balance / 1e18);
+            $("#profile-balance").html(balance);
             if (balance == 0)
                 $("#profile-withdraw").hide();
         });
-        contract.BetPlaced({ user: walletAddress }, {  fromBlock: startBlock })
-            .get(function (err, logs) {
-                var bets = logs.map(log => log.args);
-                var games = {}
-                bets.forEach(bet => games[bet.game_id] = {});
-                var game_ids = bets.forEach(bet => bet.game_id);
-                contract.GameCreated({ id: game_ids }, { fromBlock: startBlock })
-                .get(function (err, logs) {
-                    logs.forEach(log => games[log.args.id] = log.args);
-                    $("#profile-bets-table tbody").empty();
-                    bets.forEach(bet => {
-                        var game = games[bet.game_id];
-                        bet.team = bet.home ? game.home : game.away;
-                        bet.date = new Date(game.locktime * 1000).toLocaleDateString();
-                        addBetToTable("#profile-bets-table", bet);
-                    });
-                });
-            });
+        getGames().then(function (games) {
+            $("#my-games-table tbody").empty();
+            games.filter(game => game.creator == walletAddress)
+                .forEach(game => addGameToTable(game, "#my-games-table"));
+        });
         contract.Withdrawal({ user: walletAddress }, { fromBlock: startBlock })
             .get(function (err, logs) {
                 var withdrawals = logs.map(log => log.args);
+                withdrawals.forEach(w => w.amount = parseFloat(w.amount / 1e18));
                 $("#profile-withdrawals-table tbody").empty();
                 withdrawals.forEach(addWithdrawalToTable);
             });
@@ -714,13 +728,12 @@ function profilePage() {
             e.target.disabled = true;
             getWalletAddress().then(walletAddress => {
                 contract.withdraw({ from: walletAddress, gas: 50000 },
-                    function (err, tx_hash) {
+                    function (err, tx) {
                         if (err) {
                             e.target.disabled = false;
                             return false;
                         }
-                        $("#profile-status").html(`Withdrawal initiated. View status 
-                            <a href="https://etherscan.io/tx/${tx_hash}">here</a>`);
+                        txAlert(tx, "Withdrawal initiated.", "#profile-alerts");
                     });
             });
         });
@@ -731,10 +744,144 @@ function addWithdrawalToTable(withdrawal) {
     var timestamp = new Date(parseInt(withdrawal.timestamp) * 1000);
     var dateString = timestamp.toLocaleDateString();
     var timeString = timestamp.toLocaleTimeString();
-    var amount = parseFloat(withdrawal.amount / 1e18);
     var row = `<tr>
         <td>${dateString} ${timeString}</td>
-        <td class="currency">${amount}</td>
+        <td class="currency">${withdrawal.amount}</td>
     </tr>`;
     $("#profile-withdrawals-table tbody").append(row);
+}
+
+function createGamePage() {
+    updateTeams('NBA');
+    $("#create-game-submit").click(function () {
+        getWalletAddress().then(function (walletAddress) {
+            var home = $("#create-game-home").val();
+            var away = $("#create-game-away").val();
+            var category = parseInt($("#create-game-category").val());
+            var offset = new Date().getTimezoneOffset() * 60 * 1000;
+            var locktime = (document.querySelector("#create-game-locktime").valueAsNumber + offset) / 1000;
+            contract.createGame(home, away, category, locktime, 
+                { from: walletAddress, gas: 400000, gasPrice: GAS_PRICE }, function (err, tx) {
+                    if (err) return false;
+                    txAlert(tx, "Creating game.", "#create-game-alerts");
+                    $(".create-game-input").val('');
+                });
+        });
+    });
+}
+
+function updateTeams(category) {
+    $("#create-game-home, #create-game-away").empty();
+    dictionary.logos[category].concat().sort().forEach(team => {
+        $("#create-game-home, #create-game-away").append(
+            `<option>${team}</option`);
+    });
+}
+
+function manageGamePage(game_id) {
+    $("#game-manage-verify-section").hide();
+    $("#game-manage-score-status").hide();
+    $("#game-manage-verified-status").hide();
+
+    $("#game-manage-betting-links").append(`
+        <a href="#spread_${game_id}"><button class="btn btn-bet">SPREAD</button></a>
+        <a href="#moneyline_${game_id}"><button class="btn btn-bet">MONEY LINE</button></a>
+        <a href="#overunder_${game_id}"><button class="btn btn-bet">OVER UNDER</button></a>
+    `);
+
+    getGame(game_id).then(function (game) {
+        $("#game-manage-home-score").val(game.result.home);
+        $("#game-manage-away-score").val(game.result.away);
+        $(".away").html(game.away);
+        $(".home").html(game.home);
+
+        var ms = 1000 * (game.result.timestamp + 12*3600);
+        var verifyTime = new Date(ms);
+
+        if (game.result.home == '-')
+            $("#game-manage-verify-section").hide();
+        else {
+            $("#game-manage-verify-section").show();
+            var timeString = `${verifyTime.toLocaleDateString()} ${verifyTime.toLocaleTimeString()}`;
+        }
+        
+        // wait 12 hours to activate verify button
+        var now = new Date();
+        var notice = `Verifying a score pays out all bets associated with a game.`
+        if (verifyTime > now) {
+            document.getElementById('verify-score').disabled = true;
+            notice += ` The current score cannot be verified until ${timeString}`;
+        }
+        $("#game-manage-verify-status").html(notice);
+
+        // set logos
+        var homePos = getLogoPosition(game.home);
+        var awayPos = getLogoPosition(game.away);
+        $(`#view-container .logo-home`)
+            .css('background-position-x', homePos.x)
+            .css('background-position-y', homePos.y);
+        $(`#view-container .logo-away`)
+            .css('background-position-x', awayPos.x)
+            .css('background-position-y', awayPos.y);
+    });
+
+    $("#game-manage-score-btn").click(function () {
+        $.when(getWalletAddress(), getGame(game_id))
+            .then(function (walletAddress, game) {
+            // make sure game is scorable
+            var now = new Date().getTime() / 1000;
+            if (game.locktime > now) {
+                errorAlert("Games cannot be scored until after they start", "#game-manage-alerts");
+                return false;
+            }
+
+            var homeScore = parseInt($("#game-manage-home-score").val());
+            var awayScore = parseInt($("#game-manage-away-score").val());
+            if (homeScore == '' || awayScore == '')
+                return false;
+            contract.setGameResult(game_id, homeScore, awayScore,
+            { from: walletAddress, gas: 400000 }, function (err, tx) {
+                var notice = "Score submitted. Scores must still be verified before bets are paid out."        
+                txAlert(tx, notice, "#game-manage-alerts");
+            });
+        });
+    });
+
+    $("#delete-game-btn").click(function () {
+        getWalletAddress().then(function (walletAddress) {
+            if ($("#verify-delete-text").val() != "DELETE")
+                return false;
+            contract.deleteGame(game_id, { from: walletAddress, gas: 1000000 }, 
+                function (err, tx) {
+                    $("#game-manage-delete-status")
+                        .html(`Deleting Game Permanently. 
+                            View status <a href="${txLink(tx)}">here</a>`)
+                        .show();
+                });
+        });
+    });
+
+    $("#verify-score").click(function () {
+        document.getElementById('verify-score').disabled = true;
+        getWalletAddress().then(function (walletAddress) {
+            contract.verifyGameResult(game_id, { from: walletAddress, gas: 500000 }, function (err, tx) {
+                if (err) {
+                    document.getElementById('verify-score').disabled = false;
+                    return false;
+                }
+                txAlert(tx, "Game verification and bet payment process initiated.", "#game-manage-alerts");
+            });
+        });
+    });
+
+    contract.GameVerified({ game_id: game_id }, { fromBlock: startBlock }, function (err, logs) {
+        if (logs.length == 0) return false;
+        $("#game-manage-verify-status").hide();
+        $("#game-manage-verified-status").show();
+        $("#verify-score").hide();
+    });
+}
+
+function txLink (tx) {
+    return `https://etherscan.io/tx/${tx}`;
 }

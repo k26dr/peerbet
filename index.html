@@ -19,7 +19,7 @@
 			<li><a class="navbar-link" href="#games">Games</a></li>
             <li><a class="navbar-link" href="#results">Results</a></li>
 			<li><a class="navbar-link" href="#profile">Profile</a></li>
-			<li><a class="navbar-link" href="#withdraw">Withdraw</a></li>
+            <li><a class="navbar-link" href="#creategame">Create New Game</a></li>
 		  </ul>
 		</div><!-- /.navbar-collapse -->
 	  </div><!-- /.container-fluid -->
@@ -48,6 +48,13 @@
 <!-- Page HTML templates below -->
 
 <section class="page" id="games">
+    <div id="games-alerts">
+        <div class="alert alert-info">
+            Welcome to PeerBet, the sports betting site with the lowest fees!
+            To get started, install <a class="alert-link" href="https://metamask.io/">Metamask</a>,
+            an Ethereum light-client for the browser. Games will appear once the extension is active.
+        </div>
+    </div>
     <h1>Games</h1>
     <table id="games-table" class="table table-striped">
         <thead>
@@ -57,7 +64,7 @@
                 <th>Category</th>
                 <th>Date</th>
                 <th>Time</th>
-                <th>Bets</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
@@ -79,7 +86,7 @@
                 <th>Category</th>
                 <th>Date</th>
                 <th>Time</th>
-                <th>Bets</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
@@ -90,17 +97,20 @@
     </table>
 </section>
 
-<section class="page" id="spread">
+<section class="page" id="bets-page">
     <h1>
         <span class="logo logo-home"></span>
         <span class="home">Home</span> vs <span class="away">Away</span>
         <span class="logo logo-away"></span>
     </h1>
 
+
     <div>
         Gametime: <span class="locktime"></span> - 
         <span class="game-status">Betting locks 10 min prior to gametime</span>
     </div>
+
+    <div id="bet-alerts"></div>
 
     <div id="score-row">
         Final Score: 
@@ -239,47 +249,10 @@
     </div>
 </section>
 
-<section class="page" id="admin">
-    <h1>Admin Page</h1>
-
-    <div id="admin-status"></div>
-
-    <h3>Create Game</h3>
-    <div>
-        <label>Away</label>
-        <input id="create-game-away" class="create-game-input">
-
-        <label>Home</label>
-        <input id="create-game-home" class="create-game-input">
-
-        <label>Category</label>
-        <input type="number" id="create-game-category" class="create-game-input">
-
-        <label>Locktime</label>
-        <input type="datetime-local" id="create-game-locktime" class="create-game-input">
-
-        <button id="create-game-submit">Create Game</button>
-    </div>
-    <h3>Games</h3>
-    <table id="admin-games-table" class="table table-striped">
-        <thead>
-            <tr>
-                <th>Home</th>
-                <th>Away</th>
-                <th>Category</th>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Score</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-</section>
-
 <section class="page" id="profile">
     <h3>Profile</h1>
         
-    <div id="profile-status"></div>
+    <div id="profile-alerts"></div>
 
     <table class="table">
         <tr>
@@ -295,20 +268,23 @@
         </tr>
     </table>
 
-    <h3>My Bets</h3>
+    <h3>My Games</h3>
     <div class="pane">
-        <table id="profile-bets-table" class="table table-striped">
+        <table id="my-games-table" class="table table-striped">
             <thead>
                 <tr>
+                    <th>Home</th>
+                    <th>Away</th>
+                    <th>Score</th>
+                    <th>Category</th>
                     <th>Date</th>
-                    <th>Team</th>
-                    <th>Line</th>
-                    <th class="currency">Amount (ETH)</th>
-                <tr>
+                    <th>Time</th>
+                    <th></th>
+                </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="4">Loading...</td>
+                    <td colspan="6">Loading...</td>
                 </tr>
             </tbody>
         </table>
@@ -331,4 +307,107 @@
         </table>
     </div>
     
+</section>
+
+<section class="page" id="create-game">
+    <h1>Create New Game</h1>
+
+    <div id="create-game-alerts"></div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="form-group">
+                <label>Away</label>
+                <select class="form-control create-game-input" id="create-game-away"></select>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group">
+                <label>Home</label>
+                <select class="form-control create-game-input" id="create-game-home"></select>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="form-group">
+                <label>Category</label>
+                <select class="form-control create-game-input" id="create-game-category">
+                    <option value="1">NBA</option>
+                </select>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group">
+                <label>Gametime</label>
+                <input class="form-control create-game-input" type="datetime-local" id="create-game-locktime">
+            </div>
+        </div>
+    </div>
+    <div class="form-group">
+        <button class="form-control btn-bet" id="create-game-submit">
+            Create Game
+        </button>
+    </div>
+</section>
+
+<section class="page" id="manage-game">
+    <h1>
+        <span class="logo logo-home"></span>
+        <span class="home"></span> vs <span class="away"></span>
+        <span class="logo logo-away"></span>
+    </h1>
+
+    <div id="game-manage-alerts"></div>
+
+    <h3>Betting Pages</h3>
+    <div id="game-manage-betting-links"></div>
+
+    <hr>
+
+    <div id="game-manage-score-section">
+        <h3>Score Game</h3>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label class="home"></label>
+                    <input class="form-control" id="game-manage-home-score" type="number">
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label class="away"></label>
+                    <input class="form-control" id="game-manage-away-score" type="number">
+                </div>
+            </div>
+        </div>
+        <button id="game-manage-score-btn" class="btn btn-primary">Score Game</button>
+    </div>
+
+    <hr>
+
+    <div id="game-manage-verify-section">
+        <h3>Verify Score</h3>
+        <div class="alert alert-info" id="game-manage-verify-status"></div>
+        <div class="alert alert-success" id="game-manage-verified-status">
+            This game has been verified and bets have been paid out!
+        </div>
+        <button id="verify-score" class="btn btn-success">Verify Score</button>
+        <hr>
+    </div>
+
+
+    <h3>Delete Game</h3>
+    <div id="game-manage-delete-status" class="alert alert-danger">
+        WARNING: Deleting a game will permanently cancel all unpaid bets 
+        and bids for a game. Type DELETE if you are sure you want to delete
+        this game
+    </div>
+    <div class="form-group">
+        <input class="form-control" id="verify-delete-text">
+    </div>
+    <div class="form-group">
+        <button id="delete-game-btn" class="btn btn-danger">Delete Permanently</button>
+    </div>
+
 </section>

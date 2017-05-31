@@ -24,8 +24,8 @@ var peerbet = PeerBet.new(
    {
      from: walletAddress, 
      data: compiled,
-     gas: 4600000,
-     gasPrice: 2.1e10
+     gas: 46e5,
+     gasPrice: 20e9
    }, function (e, contract){
     if (e) console.log(e);
     if (typeof contract.address !== 'undefined') {

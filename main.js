@@ -1,7 +1,8 @@
 var docReady = $.Deferred();
 $(docReady.resolve);
 
-var GAS_PRICE = 2e10;
+var CHEAP_GAS_PRICE = 2e9;
+var FAST_GAS_PRICE = 20e9;
 var abiPromise = $.get("bin/peerbet.sol:PeerBet.abi");
 var contractAddressPromise = $.get("contract_address");
 var dictionaryPromise = $.get("data_dictionary.json");
@@ -761,7 +762,7 @@ function createGamePage() {
             var offset = new Date().getTimezoneOffset() * 60 * 1000;
             var locktime = (document.querySelector("#create-game-locktime").valueAsNumber + offset) / 1000;
             contract.createGame(home, away, category, locktime, 
-                { from: walletAddress, gas: 400000, gasPrice: GAS_PRICE }, function (err, tx) {
+                { from: walletAddress, gas: 400000 }, function (err, tx) {
                     if (err) return false;
                     txAlert(tx, "Creating game.", "#create-game-alerts");
                     $(".create-game-input").val('');

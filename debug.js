@@ -29,32 +29,17 @@ function parseBid(hex) {
     return {
         bidder: '0x' + hex.slice(0,40),
         amount: parseInt(hex.slice(40,104), 16),
-        home: parseInt(hex.slice(104,106)) == 1,
+        over: parseInt(hex.slice(104,106)) == 1,
         line: ~~parseInt(hex.slice(106), 16)
-    }
-}
-
-function parseShortBid(hex) {
-    return {
-        amount: parseInt(hex.slice(0,64), 16),
-        home: parseInt(hex.slice(64,66)) == 1,
-        line: ~~parseInt(hex.slice(66), 16)
     }
 }
 
 function parseBids(hex) {
     if (hex.slice(0,2) == '0x')
         hex = hex.slice(2);
-    var short = (hex.length % 74 == 0);
     var bids = []
-    if (short) {
-        for (var i=0; i < hex.length; i += 74) 
-            bids.push(parseShortBid(hex.slice(i, i+74)));
-    }
-    else {
-        for (var i=0; i < hex.length; i += 114)
-            bids.push(parseBid(hex.slice(i, i+114)));
-    }
+    for (var i=0; i < hex.length; i += 114)
+        bids.push(parseBid(hex.slice(i, i+114)));
 
     return bids;
 }

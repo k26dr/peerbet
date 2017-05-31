@@ -7,8 +7,8 @@ contract PeerBet {
     // indexing on a string causes issues with web3, so category has to be an int
     event GameCreated(uint indexed id, address indexed creator, string home, 
         string away, uint16 indexed category, uint64 locktime);
-    event BidPlaced(uint indexed game_id, address bidder, uint amount, bool home, int32 line);
-    event BetPlaced(uint indexed game_id, address indexed user, bool home, uint amount, int32 line);
+    event BidPlaced(uint indexed game_id, address bidder, uint amount, bool over, int32 line);
+    event BetPlaced(uint indexed game_id, address indexed user, bool over, uint amount, int32 line);
     event GameScored(uint indexed game_id, int homeScore, int awayScore, uint timestamp);
     event Withdrawal(address indexed user, uint amount, uint timestamp);
 
@@ -20,16 +20,16 @@ contract PeerBet {
     }
 
     struct Bet {
-        address home;
-        address away;
+        address over;
+        address under;
         uint amount; /* in wei */
         int32 line;
         BetStatus status;
     }
 
     struct Book {
-        Bid[] homeBids;
-        Bid[] awayBids;
+        Bid[] overBids;
+        Bid[] underBids;
         Bet[] bets;
     }
 
@@ -81,33 +81,20 @@ contract PeerBet {
     }
     
     function cancelOpenBids(Book storage book) private returns (int) {
-        for (uint i=0; i < book.homeBids.length; i++) {
-            Bid bid = book.homeBids[i];
+        for (uint i=0; i < book.overBids.length; i++) {
+            Bid bid = book.overBids[i];
             if (bid.amount == 0)
                 continue;
             balances[bid.bidder] += bid.amount;
         }
-        delete book.homeBids;
-        for (i=0; i < book.awayBids.length; i++) {
-            bid = book.awayBids[i];
+        delete book.overBids;
+        for (i=0; i < book.underBids.length; i++) {
+            bid = book.underBids[i];
             if (bid.amount == 0)
                 continue;
             balances[bid.bidder] += bid.amount;
         }
-        delete book.awayBids;
-
-        return -1;
-    }
-
-    function cancelBets(Book storage book) private returns (int) {
-        for (uint i=0; i < book.bets.length; i++) {
-            Bet bet = book.bets[i];
-            if (bet.status == BetStatus.Paid)
-                continue;
-            balances[bet.home] += bet.amount;
-            balances[bet.away] += bet.amount;
-        }
-        delete book.bets;
+        delete book.underBids;
 
         return -1;
     }
@@ -122,12 +109,12 @@ contract PeerBet {
             if (bet.status == BetStatus.Paid)
                 continue;
             if (totalPoints > bet.line)
-                balances[bet.home] += bet.amount * 2;
+                balances[bet.over] += bet.amount * 2;
             else if (totalPoints < bet.line)
-                balances[bet.away] += bet.amount * 2;
+                balances[bet.under] += bet.amount * 2;
             else {
-                balances[bet.away] += bet.amount;
-                balances[bet.home] += bet.amount;
+                balances[bet.under] += bet.amount;
+                balances[bet.over] += bet.amount;
             }
             bet.status = BetStatus.Paid;
         }
@@ -170,7 +157,7 @@ contract PeerBet {
 
         // Use leftover funds to place open bids (maker)
         if (bid.amount > 0) {
-            Bid[] bidStack = over ? game.book.homeBids : game.book.awayBids;
+            Bid[] bidStack = over ? game.book.overBids : game.book.underBids;
             if (over)
                 addBidToStack(remainingBid, bidStack, true);
             else
@@ -186,14 +173,14 @@ contract PeerBet {
     // clients will have to parse the hex dump to get the bids out
     function getOpenBids(uint game_id) constant returns (bytes) {
         Game game = getGameById(game_id);
-        uint nBids = game.book.homeBids.length + game.book.awayBids.length;
+        uint nBids = game.book.overBids.length + game.book.underBids.length;
         bytes memory s = new bytes(57 * nBids);
         uint k = 0;
         for (uint i=0; i < nBids; i++) {
-            if (i < game.book.homeBids.length)
-                Bid bid = game.book.homeBids[i];
+            if (i < game.book.overBids.length)
+                Bid bid = game.book.overBids[i];
             else
-                bid = game.book.awayBids[i - game.book.homeBids.length];
+                bid = game.book.underBids[i - game.book.overBids.length];
             bytes20 bidder = bytes20(bid.bidder);
             bytes32 amount = bytes32(bid.amount);
             byte home = bid.over ? byte(1) : byte(0);
@@ -212,7 +199,7 @@ contract PeerBet {
     function matchExistingBids(Bid bid, uint game_id) private returns (Bid) {
         Game game = getGameById(game_id);
         bool over = bid.over;
-        Bid[] matchStack = over ?  game.book.awayBids : game.book.homeBids;
+        Bid[] matchStack = over ?  game.book.underBids : game.book.overBids;
         int i = int(matchStack.length) - 1;
         while (i >= 0 && bid.amount > 0) {
             uint j = uint(i);

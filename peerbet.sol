@@ -83,15 +83,11 @@ contract PeerBet {
     function cancelOpenBids(Book storage book) private returns (int) {
         for (uint i=0; i < book.overBids.length; i++) {
             Bid bid = book.overBids[i];
-            if (bid.amount == 0)
-                continue;
             balances[bid.bidder] += bid.amount;
         }
         delete book.overBids;
         for (i=0; i < book.underBids.length; i++) {
             bid = book.underBids[i];
-            if (bid.amount == 0)
-                continue;
             balances[bid.bidder] += bid.amount;
         }
         delete book.underBids;
@@ -156,7 +152,7 @@ contract PeerBet {
         Bid memory remainingBid = matchExistingBids(bid, game_id);
 
         // Use leftover funds to place open bids (maker)
-        if (bid.amount > 0) {
+        if (remainingBid.amount > 0) {
             Bid[] bidStack = over ? game.book.overBids : game.book.underBids;
             if (over)
                 addBidToStack(remainingBid, bidStack, true);
@@ -198,8 +194,8 @@ contract PeerBet {
 
     function matchExistingBids(Bid bid, uint game_id) private returns (Bid) {
         Game game = getGameById(game_id);
-        bool over = bid.over;
-        Bid[] matchStack = over ?  game.book.underBids : game.book.overBids;
+        Bid[] matchStack = bid.over ?  game.book.underBids : game.book.overBids;
+
         int i = int(matchStack.length) - 1;
         while (i >= 0 && bid.amount > 0) {
             uint j = uint(i);
@@ -207,8 +203,8 @@ contract PeerBet {
                 i--;
                 continue;
             }
-            if (over && bid.line < matchStack[j].line 
-                || !over && bid.line > matchStack[j].line)
+            if (bid.over && bid.line < matchStack[j].line 
+                || !bid.over && bid.line > matchStack[j].line)
                 break;
 
             uint betAmount;
@@ -220,15 +216,15 @@ contract PeerBet {
             matchStack[j].amount -= betAmount;
 
             Bet memory bet = Bet(
-                over ? bid.bidder : matchStack[j].bidder,
-                over ? matchStack[j].bidder : bid.bidder,
+                bid.over ? bid.bidder : matchStack[j].bidder,
+                bid.over ? matchStack[j].bidder : bid.bidder,
                 betAmount,
                 matchStack[j].line,
                 BetStatus.Open
             );
             game.book.bets.push(bet);
-            BetPlaced(game_id, bid.bidder, over, betAmount, matchStack[j].line);
-            BetPlaced(game_id, matchStack[j].bidder, !over, betAmount, matchStack[j].line);
+            BetPlaced(game_id, bid.bidder, bid.over, betAmount, matchStack[j].line);
+            BetPlaced(game_id, matchStack[j].bidder, !bid.over, betAmount, matchStack[j].line);
             i--;
         }
         return bid;

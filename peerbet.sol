@@ -259,7 +259,7 @@ contract PeerBet {
         Bid memory remainingBid = matchExistingBids(bid, game_id, book_type);
 
         // Use leftover funds to place open bids (maker)
-        if (bid.amount > 0) {
+        if (remainingBid.amount > 0) {
             Bid[] bidStack = home ? book.homeBids : book.awayBids;
             if (book_type == BookType.OverUnder && home)
                 addBidToStack(remainingBid, bidStack, true);

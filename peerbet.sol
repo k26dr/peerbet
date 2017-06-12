@@ -224,7 +224,8 @@ contract PeerBet {
             );
             game.book.bets.push(bet);
             BetPlaced(game_id, bid.bidder, bid.over, betAmount, matchStack[j].line);
-            BetPlaced(game_id, matchStack[j].bidder, !bid.over, betAmount, matchStack[j].line);
+            BetPlaced(game_id, matchStack[j].bidder, !bid.over, betAmount, 
+                matchStack[j].line);
             i--;
         }
         return bid;
@@ -242,7 +243,8 @@ contract PeerBet {
         return game_ids;
     }
         
-    function addBidToStack(Bid bid, Bid[] storage stack, bool reverse) private returns (int) {
+    function addBidToStack(Bid bid, Bid[] storage stack, bool reverse) private 
+    returns (int) {
         if (stack.length == 0) {
             stack.push(bid);
             return -1;

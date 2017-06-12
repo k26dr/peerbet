@@ -1,0 +1,110 @@
+<section class="page" id="bets-page">
+    <h1>
+        <span class="home">---</span> vs <span class="away">---</span>
+    </h1>
+
+
+    <div>Gametime: <span class="locktime"></span></div>
+
+    <div id="bet-alerts"></div>
+
+    <div id="score-row">
+        Final Score: 
+        <span class="game-score">
+            <span class="home-score"></span> - 
+            <span class="away-score"></span>
+        </span>
+    </div>
+    
+    <div id="bet-placements">
+        <h3>Bet Over</h3>
+
+        <label>Line</label>
+        <input id="home-line" type="number">
+
+        <label>Amount (ETH)</label>
+        <input id="home-amount" type="number"> 
+
+        <button id="place-bet-home">Place Bet</button>
+
+        <hr>
+        
+        <h3>Bet Under</h3>
+
+        <label>Line</label>
+        <input id="away-line" type="number"> 
+
+        <label>Amount (ETH)</label>
+        <input id="away-amount" type="number"> 
+
+        <button id="place-bet-away">Place Bet</button>
+    </div>
+
+    <hr>
+
+    <div id="open-bids">
+        <h3>Open Over Bids</h3>
+        <table id="over-bids-table">
+            <thead>
+                <tr>
+                    <th>Line</th>
+                    <th class="currency">Amount (ETH)</th>
+                <tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <hr>
+
+        <h3>Open Under Bids</h3>
+        <table id="under-bids-table">
+            <thead>
+                <tr>
+                    <th>Line</th>
+                    <th class="currency">Amount (ETH)</th>
+                <tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <hr>
+
+    <div id="bets-section">
+        <h3>Latest Bets</h3>
+        <table id="bets-table">
+            <thead>
+                <tr>
+                    <th>Line</th>
+                    <th class="currency">Amount (ETH)</th>
+                <tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+</section>
+
+<hr>
+
+<section id="score-game">
+
+    <div id="game-manage-score-section">
+        <h3>Score Game</h3>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label class="home"></label>
+                    <input class="form-control" id="game-manage-home-score" type="number">
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label class="away"></label>
+                    <input class="form-control" id="game-manage-away-score" type="number">
+                </div>
+            </div>
+        </div>
+        <button id="game-manage-score-btn" class="btn btn-primary">Score Game</button>
+    </div>
+</section>

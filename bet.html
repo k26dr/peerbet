@@ -1,8 +1,14 @@
-<section class="page" id="bets-page">
+<html>
+<head>
+    <link rel="stylesheet" href="main.css">
+</head>
+
+<body>
     <h1>
         <span class="home">---</span> vs <span class="away">---</span>
     </h1>
 
+    <div id="notice"></div>
 
     <div>Gametime: <span class="locktime"></span></div>
 
@@ -20,24 +26,24 @@
         <h3>Bet Over</h3>
 
         <label>Line</label>
-        <input id="home-line" type="number">
+        <input id="over-line" type="number">
 
         <label>Amount (ETH)</label>
-        <input id="home-amount" type="number"> 
+        <input id="over-amount" type="number"> 
 
-        <button id="place-bet-home">Place Bet</button>
+        <button id="place-bet-over">Place Bet</button>
 
         <hr>
         
         <h3>Bet Under</h3>
 
         <label>Line</label>
-        <input id="away-line" type="number"> 
+        <input id="under-line" type="number"> 
 
         <label>Amount (ETH)</label>
-        <input id="away-amount" type="number"> 
+        <input id="under-amount" type="number"> 
 
-        <button id="place-bet-away">Place Bet</button>
+        <button id="place-bet-under">Place Bet</button>
     </div>
 
     <hr>
@@ -83,28 +89,22 @@
         </table>
     </div>
 
-</section>
+    <hr>
 
-<hr>
+    <h3>Score Game</h3>
 
-<section id="score-game">
+    <label class="home"></label>
+    <input id="home-score-input" type="number">
 
-    <div id="game-manage-score-section">
-        <h3>Score Game</h3>
-        <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label class="home"></label>
-                    <input class="form-control" id="game-manage-home-score" type="number">
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label class="away"></label>
-                    <input class="form-control" id="game-manage-away-score" type="number">
-                </div>
-            </div>
-        </div>
-        <button id="game-manage-score-btn" class="btn btn-primary">Score Game</button>
-    </div>
-</section>
+    <label class="away"></label>
+    <input id="away-score-input" type="number">
+
+    <button id="score-btn">Score Game</button>
+
+	<script src="https://code.jquery.com/jquery-3.1.1.js"
+		integrity="sha256-16cdPddA6VdVInumRGo6IbivbERE8p7CQR3HzTBuELA="
+		crossorigin="anonymous"></script>
+    <script src="main.js"></script>
+</body>
+
+</html>

@@ -120,9 +120,8 @@ contract PeerBet {
 
     function setGameResult(uint game_id, int homeScore, int awayScore) returns (int) {
         Game game = getGameById(game_id);
-        if (msg.sender != game.creator) return 1;
-        if (game.locktime > now) return 2;
-        if (game.status == GameStatus.Scored) return 3;
+        if (game.locktime > now) return 1;
+        if (game.status == GameStatus.Scored) return 2;
 
         cancelOpenBids(game.book);
 

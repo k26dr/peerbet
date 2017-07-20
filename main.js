@@ -1,5 +1,8 @@
+// Load ABI and contract address
 var abiPromise = $.get("bin/peerbet.sol:PeerBet.abi");
 var contractAddressPromise = $.get("contract_address");
+
+// Wait for Metamask to inject web3
 var web3Promise = new Promise(function (resolve, reject) {
     var interval = setInterval(function () {
         if (typeof web3 !== 'undefined') {
@@ -38,10 +41,8 @@ function getWalletAddress () {
         else if (typeof mist !== 'undefined') {
             mist.requestAccount(function (err, accounts) {
                 if (err) reject(err);
-                else {
-                    // cache then resolve
+                else 
                     var walletAddress = accounts[accounts.length - 1];
-                }
             })
         }
 		resolve(walletAddress);
@@ -96,7 +97,7 @@ function getGames () {
 
 function getGame(id) {
     return getGames().then(function (games) {
-        var game = games.filter(g => g.id == id)[0];
+        var game = games.find(g => g.id == id);
         return game;
     })
 }
@@ -108,7 +109,7 @@ function gamesPage () {
 }
 
     
-function addGameToTable (game, table) {
+function addGameToTable (game) {
     var category = 'NBA';
     var gametime = new Date(parseInt(game.locktime) * 1000);
     var date = gametime.toString().slice(0,10);
@@ -140,9 +141,9 @@ function getBets(game_id) {
     });
 }
 
-function getOpenBids(game_id, book) {
+function getOpenBids(game_id) {
     return new Promise(function (resolve, reject) {
-        contract.getOpenBids.call(game_id, book, function (err, hex) {
+        contract.getOpenBids.call(game_id, function (err, hex) {
             var bids = parseBids(hex);
             bids = bids.filter(bid => bid.amount > 0);
             bids.forEach(bid => bid.amount = parseFloat(bid.amount / 1e18));
@@ -174,9 +175,7 @@ function betsPage() {
             .forEach(bid => addBidToTable("#under-bids-table", bid));
     });
     getBets(id).then(function (bets) {
-        bets.filter(bet => bet.over)
-            .forEach(bet => addBetToTable("#bets-table", bet));
-
+        bets.filter(bet => bet.over).forEach(addBetToTable);
     });
 
     // listeners for bet placement
@@ -186,12 +185,11 @@ function betsPage() {
             var side = over ? "over" : "under";
             var line = parseFloat($(`#${side}-line`).val());
             var amount = parseFloat($(`#${side}-amount`).val()) * 1e18;
-            var gas = 500000;
             
-            console.log(id, over, line, amount, gas);
             contract.bid(id, over, line, 
-                { from: walletAddress, value: amount , gas: gas }, 
+                { from: walletAddress, value: amount , gas: 5e5 }, 
                 function (err, tx) {
+                    // callback code would go here 
                 });
         });
     });
@@ -221,7 +219,7 @@ function addBidToTable (table, bid) {
     $(table + " tbody").prepend(row);
 }
 
-function addBetToTable(table, bet) {
+function addBetToTable(bet) {
     var row = `<tr class="bet">
         <td>${bet.line}</td>
         <td class="currency">${bet.amount}</td>
@@ -241,16 +239,9 @@ function parseBid(hex) {
 function parseBids(hex) {
     if (hex.slice(0,2) == '0x')
         hex = hex.slice(2);
-    var short = (hex.length % 74 == 0);
     var bids = []
-    if (short) {
-        for (var i=0; i < hex.length; i += 74) 
-            bids.push(parseShortBid(hex.slice(i, i+74)));
-    }
-    else {
-        for (var i=0; i < hex.length; i += 114)
-            bids.push(parseBid(hex.slice(i, i+114)));
-    }
+    for (var i=0; i < hex.length; i += 114)
+        bids.push(parseBid(hex.slice(i, i+114)));
 
     return bids;
 }
@@ -261,6 +252,15 @@ function withdrawPage () {
         contract.balances(walletAddress, function (err, balance) {
             balance = parseInt(balance) / 1e18;
             $("#balance").html(balance);
+        });
+    });
+
+    $("#withdraw").click(function (e) {
+        getWalletAddress().then(function (walletAddress) {
+            contract.withdraw({ from: walletAddress, gas: 50000 },
+                function (err, tx) {
+                    // callback code goes here
+                });
         });
     });
 }

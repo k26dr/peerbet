@@ -19,7 +19,7 @@ contract PeerBet {
         mapping(Side => uint) counters;
         mapping(address => Bet) bets;
     }
-    mapping(string => Line) lines;
+    mapping(string => Line) public lines;
 
     function register(string calldata id, uint bettingEnds, address resolver) public {
         require(lines[id].bettingEnds == 0, "Line is already registered");
@@ -77,4 +77,11 @@ contract PeerBet {
         require(success, "Transfer failed.");
     }
 
+    function viewBet(string calldata lineId, address bettor) public view returns (Bet memory) {
+        return lines[lineId].bets[bettor];
+    }
+
+    function viewCounter(string calldata lineId, Side side) public view returns (uint) {
+        return lines[lineId].counters[side];
+    } 
 }

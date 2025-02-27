@@ -21,7 +21,7 @@ contract PeerBet {
     }
     mapping(string => Line) public lines;
 
-    function register(string calldata game_id, uint bettingEnds, address resolver) public {
+    function registerLine(string calldata game_id, uint bettingEnds, address resolver) public {
         require(lines[game_id].bettingEnds == 0, "Line is already registered");
         lines[game_id].bettingEnds = bettingEnds;
         lines[game_id].payoutBegins = bettingEnds + 3*86400; // If oracle dies or something, winner defaults to PUSH, and refunds can begin 3 days after betting ends

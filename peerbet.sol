@@ -21,58 +21,58 @@ contract PeerBet {
     }
     mapping(string => Line) public lines;
 
-    function registerLine(string calldata game_id, uint bettingEnds, address resolver) public {
-        require(lines[game_id].bettingEnds == 0, "Line is already registered");
-        lines[game_id].bettingEnds = bettingEnds;
-        lines[game_id].payoutBegins = bettingEnds + 3*86400; // If oracle dies or something, winner defaults to PUSH, and refunds can begin 3 days after betting ends
-        lines[game_id].resolver = resolver;
+    function registerLine(string calldata line_id, uint bettingEnds, address resolver) public {
+        require(lines[line_id].bettingEnds == 0, "Line is already registered");
+        lines[line_id].bettingEnds = bettingEnds;
+        lines[line_id].payoutBegins = bettingEnds + 3*86400; // If oracle dies or something, winner defaults to PUSH, and refunds can begin 3 days after betting ends
+        lines[line_id].resolver = resolver;
     }
 
-    function bet(string calldata game_id, Side side) public payable {
-        require(block.timestamp < lines[game_id].bettingEnds, "Betting period is over");
+    function bet(string calldata line_id, Side side) public payable {
+        require(block.timestamp < lines[line_id].bettingEnds, "Betting period is over");
         require(msg.value > 0, "No value included in bet");
-        require(lines[game_id].bets[msg.sender].counterEnd == 0, "Cannot bet twice on a line with same address. Use a new address.");
+        require(lines[line_id].bets[msg.sender].counterEnd == 0, "Cannot bet twice on a line with same address. Use a new address.");
         require(side == Side.OVER || side == Side.UNDER, "Cannot bet push");
-        lines[game_id].bets[msg.sender] = Bet(
-            lines[game_id].counters[side], 
-            lines[game_id].counters[side] + msg.value,
+        lines[line_id].bets[msg.sender] = Bet(
+            lines[line_id].counters[side], 
+            lines[line_id].counters[side] + msg.value,
             side
         );
-        lines[game_id].counters[side] += msg.value;
+        lines[line_id].counters[side] += msg.value;
     }
 
-    function cancelLine(string calldata game_id) public {
-        require(lines[game_id].resolver == msg.sender, "Only resolver can cancel line");
-        lines[game_id].cancelled = true;
-        lines[game_id].payoutBegins = block.timestamp + 86400;
+    function cancelLine(string calldata line_id) public {
+        require(lines[line_id].resolver == msg.sender, "Only resolver can cancel line");
+        lines[line_id].cancelled = true;
+        lines[line_id].payoutBegins = block.timestamp + 86400;
     }
 
-    function resolveLine(string calldata game_id, Side side) public {
-        require(lines[game_id].resolver == msg.sender, "Only resolver can resolve line");
-        lines[game_id].winner = side;
-        lines[game_id].payoutBegins = block.timestamp + 86400;
+    function resolveLine(string calldata line_id, Side side) public {
+        require(lines[line_id].resolver == msg.sender, "Only resolver can resolve line");
+        lines[line_id].winner = side;
+        lines[line_id].payoutBegins = block.timestamp + 86400;
     }
 
-    function collectPayout(string calldata game_id) public {
-        Bet memory myBet = lines[game_id].bets[msg.sender];
-        require(block.timestamp > lines[game_id].payoutBegins, "Payout period has not begun");
+    function collectPayout(string calldata line_id) public {
+        Bet memory myBet = lines[line_id].bets[msg.sender];
+        require(block.timestamp > lines[line_id].payoutBegins, "Payout period has not begun");
         require(myBet.counterEnd > 0, "Bet does not exist. Did you already claim?");
-        require(lines[game_id].cancelled || lines[game_id].winner == myBet.side || lines[game_id].winner == Side.PUSH, "Your side lost");
+        require(lines[line_id].cancelled || lines[line_id].winner == myBet.side || lines[line_id].winner == Side.PUSH, "Your side lost");
         
         Side otherSide = (myBet.side == Side.UNDER) ? Side.OVER : Side.UNDER;
-        require(lines[game_id].counters[otherSide] > myBet.counterStart, "Bet did not activate");
+        require(lines[line_id].counters[otherSide] > myBet.counterStart, "Bet did not activate");
 
         uint payoutAmount = 0;
-        if (lines[game_id].winner == Side.PUSH || lines[game_id].cancelled) {
+        if (lines[line_id].winner == Side.PUSH || lines[line_id].cancelled) {
             payoutAmount = myBet.counterEnd - myBet.counterStart;
         }
-        else if (lines[game_id].winner == myBet.side) {
-            payoutAmount = myBet.counterEnd > lines[game_id].counters[otherSide] ?
-                2 * (lines[game_id].counters[otherSide] - myBet.counterStart) :
+        else if (lines[line_id].winner == myBet.side) {
+            payoutAmount = myBet.counterEnd > lines[line_id].counters[otherSide] ?
+                2 * (lines[line_id].counters[otherSide] - myBet.counterStart) :
                 2 * (myBet.counterEnd - myBet.counterStart);
         }
         
-        delete lines[game_id].bets[msg.sender];
+        delete lines[line_id].bets[msg.sender];
         (bool success, ) = msg.sender.call{ value: payoutAmount }("");
         require(success, "Transfer failed.");
     }

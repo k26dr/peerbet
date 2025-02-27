@@ -4,39 +4,56 @@
 <p>Only one bet per line per address is supported, so if you want to bet multiple times on the same game, use multiple addresses.</p>
 
 <h3>Today's Games</h3>
+<section id="todays-games"></section>
 
-<p>NBA: Denver (-2.5) at Milwaukee</p>
-<form class="bet-form" id="20250227NBADENBY2.5">
-  <p>
-    <select>
-      <option value="OVER">Denver (-2.5)</option>
-      <option value="UNDER">Milwaukee (+2.5)</option>
-    </select>
-    <input type="number" value="amount" placeholder="Amount"> ETH
-  </p>
-  <p>
-    <button type="submit" id="place-bet">Place Bet</button>
-  </p>
-</form>
+<h3>Past Games</h3>
+<section id="past-games"></section>
 
-<h3>Yesterday's Games</h3>
-
-<p>NBA: New York (-10) vs Philadelphia</p>
-<form class="bet-form" id="20250226NBANYKBY10">
-  <p>
-    <select>
-      <option value="OVER">New York (-10)</option>
-      <option value="UNDER">Philadelphia (+10)</option>
-    </select>
-    <input type="number" value="amount" placeholder="Amount"> ETH
-  </p>
-  <p>
-    <button type="submit" id="place-bet">Place Bet</button>
-  </p>
-</form>
 
 <script>
-
 const contractAddress = "0xA98DdB0D390d04BB7d912eA5a362349a2e14354F"
+
+fetchGames()
+async function fetchGames() {
+  const csv = await fetch('data.csv').then(r => r.text())
+  const lines = csv.split('\n')
+    .filter(line => line !== "")
+    .slice(1)
+  for (let line of lines) {
+    const cols = line.split(',')
+    const id = cols[0]
+    const sport = cols[3]
+    const favorite = cols[4]
+    const underdog = cols[5]
+    const spread = cols[6]
+    const bettingEndsDate = cols[1]
+    const bettingEndsTime = cols[2]
+    const todaysEastCoastDate = new Date().toLocaleString({ timeZone: "America/New_York" }).split(',')[0]
+
+    if (bettingEndsDate === todaysEastCoastDate) {
+      const bettingGameTemplate = `
+        <p>${sport}: ${favorite} (-${spread}) vs ${underdog}</p>
+        <form class="bet-form" id="${id}">
+          <p>
+            <select>
+              <option value="OVER">${favorite} (-${spread})</option>
+              <option value="UNDER">${underdog} (+${spread})</option>
+            </select>
+            <input type="number" value="amount" placeholder="Amount"> ETH
+          </p>
+          <p>
+            <button type="submit" id="place-bet">Place Bet</button>
+          </p>
+        </form>`
+      document.getElementById('todays-games').innerHTML += bettingGameTemplate
+    }
+    else {
+      const pastGameTemplate = `
+        <p>${bettingEndsDate} - ${sport} - ${favorite} (-${spread}) vs ${underdog}</p>
+      `
+      document.getElementById('past-games').innerHTML += pastGameTemplate
+    }
+  }
+}
 
 </script>

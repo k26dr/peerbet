@@ -43,14 +43,14 @@ contract PeerBet {
 
     function cancelLine(string calldata line_id) public {
         require(lines[line_id].resolver == msg.sender, "Only resolver can cancel line");
-        require(block.timestamp < lines[line_id].payoutBegins, "Cannot set cancellations. Payouts have begun.")
+        require(block.timestamp < lines[line_id].payoutBegins, "Cannot set cancellations. Payouts have begun.");
         lines[line_id].cancelled = true;
         lines[line_id].payoutBegins = block.timestamp + 86400;
     }
 
     function resolveLine(string calldata line_id, Side side) public {
         require(lines[line_id].resolver == msg.sender, "Only resolver can resolve line");
-        require(block.timestamp < lines[line_id].payoutBegins, "Cannot resolve line. Payouts have begun.")
+        require(block.timestamp < lines[line_id].payoutBegins, "Cannot resolve line. Payouts have begun.");
         lines[line_id].winner = side;
         lines[line_id].payoutBegins = block.timestamp + 86400;
     }

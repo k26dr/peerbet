@@ -11,7 +11,6 @@
 
 
 <script>
-const contractAddress = "0xA98DdB0D390d04BB7d912eA5a362349a2e14354F"
 
 fetchGames()
 async function fetchGames() {
@@ -43,8 +42,10 @@ async function fetchGames() {
           </p>
           <p>
             <button type="submit">Place Bet</button>
-            <a class="bet-tx-explorer" style="display:none" target="_blank">View Transaction</a>
             <span class="place-bet-error" style="color:red"></span>
+          </p>
+          <p>
+            <a class="bet-tx-explorer" style="display:none" target="_blank">View Transaction</a>
           </p>
         </form>`
       document.getElementById('todays-games').innerHTML += bettingGameTemplate

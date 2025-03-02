@@ -62,10 +62,9 @@ contract PeerBet {
         require(lines[line_id].cancelled || lines[line_id].winner == myBet.side || lines[line_id].winner == Side.PUSH, "Your side lost");
         
         Side otherSide = (myBet.side == Side.UNDER) ? Side.OVER : Side.UNDER;
-        require(lines[line_id].counters[otherSide] > myBet.counterStart, "Bet did not activate");
 
         uint payoutAmount = 0;
-        if (lines[line_id].winner == Side.PUSH || lines[line_id].cancelled) {
+        if (lines[line_id].winner == Side.PUSH || lines[line_id].cancelled || myBet.counterStart >= lines[line_id].counters[otherSide]) {
             payoutAmount = myBet.counterEnd - myBet.counterStart;
         }
         else if (lines[line_id].winner == myBet.side) {

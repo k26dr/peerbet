@@ -35,14 +35,14 @@ async function fetchGames() {
         <p>${sport}: ${favorite} (-${spread}) vs ${underdog}</p>
         <form class="bet-form" id="${id}">
           <p>
-            <select>
-              <option value="OVER">${favorite} (-${spread})</option>
-              <option value="UNDER">${underdog} (+${spread})</option>
+            <select name="side">
+              <option value="2">${favorite} (-${spread})</option> <!-- OVER -->
+              <option value="1">${underdog} (+${spread})</option> <!-- UNDER -->
             </select>
-            <input type="number" value="amount" placeholder="Amount"> ETH
+            <input type="number" name="amount" step="0.001" min="0" placeholder="Amount" required> ETH
           </p>
           <p>
-            <button type="submit" id="place-bet">Place Bet</button>
+            <button type="submit">Place Bet</button>
           </p>
         </form>`
       document.getElementById('todays-games').innerHTML += bettingGameTemplate
@@ -54,6 +54,44 @@ async function fetchGames() {
       document.getElementById('past-games').innerHTML += pastGameTemplate
     }
   }
+
+  for (let el of document.getElementsByClassName('bet-form')) {
+    el.addEventListener('submit', placeBetListener)
+  }
+}
+
+async function placeBetListener(e) {
+  e.preventDefault()
+  console.log(e.target)
+  const data = new FormData(e.target)
+  const lineId = e.target.id
+  const encodedAmount = (data.get("amount") * 1e18).toString()
+  const methodID = "0x85e77b2a" // bet(string id,uint8 side)
+  const numBytesEncoded = "0000000000000000000000000000000000000000000000000000000000000040"
+  const encodedSide = "000000000000000000000000000000000000000000000000000000000000000" + data.get("side")
+  const encodedLineIdLength = "000000000000000000000000000000000000000000000000000000000000000" + parseInt(lineId.length).toString(16).padStart(2, "0")
+  const encodedLineId = stringToUTF8(lineId).padEnd(64, "0")
+
+  const accounts = await window.ethereum.request({
+    method: "eth_requestAccounts"
+  })
+  const txHash = await window.ethereum.request({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from: accounts[0],
+        to: "0xA98DdB0D390d04BB7d912eA5a362349a2e14354F",
+        value: encodedAmount,
+        data: '0x' + methodId + numBytesEncoded + encodedSide + encodedLineIdLength + encodedLineId
+      },
+    ],
+  })
+}
+
+function stringToUTF8 (str) {
+  return str.split("")
+    .map(c => c.charCodeAt(0).toString(16).padStart(2, "0"))
+    .join("")
 }
 
 </script>

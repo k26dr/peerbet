@@ -39,10 +39,12 @@ async function fetchGames() {
               <option value="2">${favorite} (-${spread})</option> <!-- OVER -->
               <option value="1">${underdog} (+${spread})</option> <!-- UNDER -->
             </select>
-            <input type="number" name="amount" step="0.001" min="0" placeholder="Amount" required> ETH
+            <input type="number" name="amount" step="0.01" min="0" placeholder="Amount" required> POL
           </p>
           <p>
             <button type="submit">Place Bet</button>
+            <a class="bet-tx-explorer" style="display:none" target="_blank">View Transaction</a>
+            <span class="place-bet-error" style="color:red"></span>
           </p>
         </form>`
       document.getElementById('todays-games').innerHTML += bettingGameTemplate
@@ -61,16 +63,24 @@ async function fetchGames() {
 }
 
 async function placeBetListener(e) {
+  const form = e.target
   e.preventDefault()
-  console.log(e.target)
-  const data = new FormData(e.target)
-  const lineId = e.target.id
-  const encodedAmount = (data.get("amount") * 1e18).toString()
-  const methodID = "0x85e77b2a" // bet(string id,uint8 side)
+  const data = new FormData(form)
+  const lineId = form.id
+  const encodedAmount = (data.get("amount") * 1e18).toString(16)
+  console.log(data.get("amount"))
+  const methodId = "85e77b2a" // bet(string id,uint8 side)
   const numBytesEncoded = "0000000000000000000000000000000000000000000000000000000000000040"
   const encodedSide = "000000000000000000000000000000000000000000000000000000000000000" + data.get("side")
-  const encodedLineIdLength = "000000000000000000000000000000000000000000000000000000000000000" + parseInt(lineId.length).toString(16).padStart(2, "0")
+  const encodedLineIdLength = parseInt(lineId.length).toString(16).padStart(64, "0")
   const encodedLineId = stringToUTF8(lineId).padEnd(64, "0")
+  const txData = methodId + numBytesEncoded + encodedSide + encodedLineIdLength + encodedLineId
+
+  const chainId = await window.ethereum.request({ method: "eth_chainId" })
+  if (chainId !== '0x89') {
+    form.querySelector('.place-bet-error').innerHTML = "Wrong Chain. Only Polygon is currently supported."
+    return false;
+  }
 
   const accounts = await window.ethereum.request({
     method: "eth_requestAccounts"
@@ -80,12 +90,16 @@ async function placeBetListener(e) {
     params: [
       {
         from: accounts[0],
-        to: "0xA98DdB0D390d04BB7d912eA5a362349a2e14354F",
+        to: "0xE00c64580013652Dfe6c8467682747AC1bE0447c",
         value: encodedAmount,
-        data: '0x' + methodId + numBytesEncoded + encodedSide + encodedLineIdLength + encodedLineId
+        data: txData 
       },
     ],
   })
+
+  const link = form.querySelector('.bet-tx-explorer')
+  link.href = `https://polygonscan.com/tx/${txHash}`
+  link.style.display = 'inline'
 }
 
 function stringToUTF8 (str) {

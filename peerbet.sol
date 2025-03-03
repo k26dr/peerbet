@@ -50,6 +50,7 @@ contract PeerBet {
 
     function resolveLine(string calldata line_id, Side side) public {
         require(lines[line_id].resolver == msg.sender, "Only resolver can resolve line");
+        require(!lines[line_id].cancelled, "Cannot resolve. Line is cancelled.");
         require(block.timestamp < lines[line_id].payoutBegins, "Cannot resolve line. Payouts have begun.");
         lines[line_id].winner = side;
         lines[line_id].payoutBegins = block.timestamp + 86400;
@@ -69,7 +70,8 @@ contract PeerBet {
         }
         else if (lines[line_id].winner == myBet.side) {
             payoutAmount = myBet.counterEnd > lines[line_id].counters[otherSide] ?
-                2 * (lines[line_id].counters[otherSide] - myBet.counterStart) :
+                // Double the activated part and refund the rest
+                2 * (lines[line_id].counters[otherSide] - myBet.counterStart) + (myBet.counterEnd - lines[line_id].counters[otherSide]) : 
                 2 * (myBet.counterEnd - myBet.counterStart);
         }
         
